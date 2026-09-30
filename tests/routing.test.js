@@ -5,10 +5,10 @@
 
 const { route } = require("../nodes/lib/router");
 
-function fakeWs(portalClient, userId, username) {
+function fakeWs(portalClient, userId, login) {
   return {
     _portalClient: portalClient,
-    _portalUser: userId || username ? { userId, username } : null,
+    _portalUser: userId || login ? { userId, login } : null,
     sent: [],
   };
 }
@@ -23,8 +23,8 @@ function setupCtx() {
     ws.sent.push({ frame: JSON.parse(frame), msg });
     return true;
   };
-  function addClient(portalClient, userId, username) {
-    const ws = fakeWs(portalClient, userId, username);
+  function addClient(portalClient, userId, login) {
+    const ws = fakeWs(portalClient, userId, login);
     clients.set(portalClient, ws);
     if (userId) {
       let set = userIndex.get(userId);
@@ -96,11 +96,11 @@ describe("router.route — user-cast", () => {
     expect(bob.sent).toHaveLength(0);
   });
 
-  it("falls back to username scan when only username given", () => {
+  it("falls back to login scan when only login given", () => {
     const ctx = setupCtx();
     const a = ctx.addClient("A", null, "alice");
     const b = ctx.addClient("B", null, "bob");
-    route({ payload: 1, _client: { username: "alice" } }, ctx);
+    route({ payload: 1, _client: { login: "alice" } }, ctx);
     expect(a.sent).toHaveLength(1);
     expect(b.sent).toHaveLength(0);
   });
@@ -152,7 +152,7 @@ describe("router.route — auth-cast", () => {
     expect(anon.sent).toHaveLength(0);
   });
 
-  it("matches username-only sessions too (any _portalUser counts)", () => {
+  it("matches login-only sessions too (any _portalUser counts)", () => {
     const ctx = setupCtx();
     const named = ctx.addClient("A", undefined, "alice");
     const anon = ctx.addClient("X");

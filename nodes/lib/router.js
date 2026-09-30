@@ -9,7 +9,7 @@
  * Routing modes, in priority order:
  *   1. msg._client.portalClient   → unicast to that one session
  *   2. msg._client.userId          → user-cast (O(1) via userIndex)
- *   3. msg._client.username        → user-cast fallback (O(N) scan)
+ *   3. msg._client.login           → user-cast fallback (O(N) scan)
  *   4. msg._client.authenticated   → auth-cast (every session with a portal user)
  *   5. otherwise                   → broadcast — unless the node-level
  *      `ctx.authOnly` flag is set, which turns an untargeted msg into an
@@ -63,9 +63,9 @@ function route(msg, ctx) {
     return { mode: "user-cast", delivered };
   }
 
-  if (target && target.username) {
+  if (target && target.login) {
     clients.forEach((ws) => {
-      if (ws._portalUser && ws._portalUser.username === target.username) {
+      if (ws._portalUser && ws._portalUser.login === target.login) {
         if (sendTo(ws, frame, msg)) delivered++;
       }
     });

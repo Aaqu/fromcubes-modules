@@ -33,11 +33,11 @@
  * @typedef {Object} ClientInfo
  * @property {string}                  portalClient  Server-assigned per-tab UUID.
  * @property {string}                  [userId]
- * @property {string}                  [userName]
- * @property {string}                  [username]
+ * @property {string}                  [login]
+ * @property {string}                  [displayName]
  * @property {string}                  [email]
  * @property {string}                  [role]
- * @property {string|Array<string>}    [groups]
+ * @property {Array<string>}           [groups]
  * @property {boolean}                 [authenticated] Outbound targeting only: deliver to every session with a portal user.
  */
 

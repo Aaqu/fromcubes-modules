@@ -73,7 +73,7 @@
       const libContent = [
         "declare const React: any;",
         "declare const ReactDOM: any;",
-        "declare function useNodeRed(): { data: any; send: (payload: any, topic?: string) => void; user: { userId?: string; userName?: string; username?: string; email?: string; role?: string; groups?: any[] } | null; portalClient: string | null; authRequired: boolean };",
+        "declare function useNodeRed(): { data: any; send: (payload: any, topic?: string) => void; user: { userId: string; login?: string; displayName?: string; email?: string; role?: string; groups: string[] } | null; portalClient: string | null; authRequired: boolean };",
       ].join("\n");
       console.log(PREFIX, "addExtraLib globals.d.ts");
       jsDef.addExtraLib(libContent, "file:///globals.d.ts");

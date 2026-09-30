@@ -15,77 +15,120 @@ const { route } = require("../nodes/lib/router");
 
 const MAX_GROUPS_HEADER_BYTES = 8 * 1024;
 
-describe("extractPortalUser — header whitelist", () => {
+describe("extractPortalUser — header contract", () => {
   it("returns null when no identity header is present", () => {
     expect(extractPortalUser({})).toBeNull();
     expect(extractPortalUser({ host: "red:1880", cookie: "a=1" })).toBeNull();
   });
 
-  it("maps only the six whitelisted headers", () => {
+  it("maps the six contract headers", () => {
     const user = extractPortalUser({
       "x-portal-user-id": "u1",
-      "x-portal-user-name": "Jan Kowalski",
-      "x-portal-user-username": "jan",
-      "x-portal-user-email": "jan@example.com",
-      "x-portal-user-role": "admin",
-      "x-portal-user-groups": '["ops","dev"]',
+      "x-portal-user-login": "jan",
+      "x-portal-user-display-name": "Jan%20Kowalski",
+      "x-portal-user-email": "jan%40example.com",
+      "x-portal-user-role": "editor",
+      "x-portal-user-groups": "ops,dev",
     });
     expect(user).toEqual({
       userId: "u1",
-      userName: "Jan Kowalski",
-      username: "jan",
+      login: "jan",
+      displayName: "Jan Kowalski",
       email: "jan@example.com",
-      role: "admin",
+      role: "editor",
       groups: ["ops", "dev"],
     });
   });
 
-  it("ignores non-whitelisted x-portal-user-* headers (no arbitrary key injection)", () => {
+  it("percent-decodes UTF-8 values", () => {
+    const user = extractPortalUser({
+      "x-portal-user-id": "u1",
+      "x-portal-user-display-name": "%C5%81ukasz%20%C5%BB%C3%B3%C5%82%C4%87",
+    });
+    expect(user.displayName).toBe("Łukasz Żółć");
+  });
+
+  it("missing x-portal-user-id means anonymous, whatever else is present", () => {
+    expect(
+      extractPortalUser({
+        "x-portal-user-login": "jan",
+        "x-portal-user-display-name": "Jan",
+        "x-portal-user-email": "jan%40example.com",
+        "x-portal-user-role": "editor",
+        "x-portal-user-groups": "ops",
+      }),
+    ).toBeNull();
+  });
+
+  it("empty or undecodable x-portal-user-id means anonymous", () => {
+    expect(extractPortalUser({ "x-portal-user-id": "" })).toBeNull();
+    expect(extractPortalUser({ "x-portal-user-id": "%E0%A4%A" })).toBeNull();
+  });
+
+  it("drops a single-value field with a malformed escape, keeps the rest", () => {
+    const user = extractPortalUser({
+      "x-portal-user-id": "u1",
+      "x-portal-user-display-name": "%E0%A4%A",
+      "x-portal-user-login": "jan",
+    });
+    expect(user).toEqual({ userId: "u1", login: "jan", groups: [] });
+  });
+
+  it("ignores the pre-contract -username / -name headers", () => {
+    const user = extractPortalUser({
+      "x-portal-user-id": "u1",
+      "x-portal-user-username": "jan",
+      "x-portal-user-name": "Jan Kowalski",
+    });
+    expect(user).toEqual({ userId: "u1", groups: [] });
+  });
+
+  it("ignores non-contract x-portal-user-* headers (no arbitrary key injection)", () => {
     const user = extractPortalUser({
       "x-portal-user-id": "u1",
       "x-portal-user-isadmin": "true",
       "x-portal-user-__proto__": "x",
       "x-portal-user-constructor": "x",
     });
-    expect(Object.keys(user)).toEqual(["userId"]);
-  });
-
-  it("ignores empty-string header values", () => {
-    expect(extractPortalUser({ "x-portal-user-id": "" })).toBeNull();
+    expect(Object.keys(user)).toEqual(["userId", "groups"]);
   });
 });
 
 describe("extractPortalUser — groups header", () => {
-  it("parses valid JSON groups", () => {
-    const user = extractPortalUser({ "x-portal-user-groups": '["a","b"]' });
-    expect(user.groups).toEqual(["a", "b"]);
+  const groupsOf = (raw) =>
+    extractPortalUser({ "x-portal-user-id": "u1", "x-portal-user-groups": raw })
+      .groups;
+
+  it("splits on raw commas before decoding, so %2C stays inside a name", () => {
+    expect(
+      groupsOf("Utrzymanie%20ruchu%20%E2%80%93%20hala%202,a%2Cb,hala-2"),
+    ).toEqual(["Utrzymanie ruchu – hala 2", "a,b", "hala-2"]);
   });
 
-  it("falls back to the raw string on invalid JSON", () => {
-    const user = extractPortalUser({ "x-portal-user-groups": "not-json" });
-    expect(user.groups).toBe("not-json");
+  it("empty or missing header yields []", () => {
+    expect(groupsOf("")).toEqual([]);
+    expect(extractPortalUser({ "x-portal-user-id": "u1" }).groups).toEqual([]);
   });
 
-  it("truncates oversized groups without JSON.parse (ReDoS/JSON-bomb guard)", () => {
-    const big = '["' + "a".repeat(MAX_GROUPS_HEADER_BYTES * 2) + '"]';
-    const user = extractPortalUser({ "x-portal-user-groups": big });
-    expect(typeof user.groups).toBe("string");
-    expect(user.groups.length).toBe(MAX_GROUPS_HEADER_BYTES);
+  it("drops empty elements", () => {
+    expect(groupsOf(",,x,")).toEqual(["x"]);
   });
 
-  it("groups JSON with __proto__ key does not pollute Object.prototype", () => {
-    const user = extractPortalUser({
-      "x-portal-user-id": "u1",
-      "x-portal-user-groups": '{"__proto__":{"polluted":true}}',
-    });
-    // JSON.parse creates an own "__proto__" property, never the prototype.
-    expect({}.polluted).toBeUndefined();
-    // And Object.assign(client, user) at the WS layer copies whitelisted
-    // top-level keys only — simulate it:
-    const client = { portalClient: "P" };
-    Object.assign(client, user);
-    expect({}.polluted).toBeUndefined();
-    expect(client.portalClient).toBe("P");
+  it("drops only the element with a malformed escape", () => {
+    expect(groupsOf("ok,%E0%A4%A,hala-2")).toEqual(["ok", "hala-2"]);
+  });
+
+  it("trims around raw commas (Node joins a repeated header with ', ')", () => {
+    expect(groupsOf("ops, dev")).toEqual(["ops", "dev"]);
+  });
+
+  it("does not parse JSON any more", () => {
+    expect(groupsOf('["a","b"]')).toEqual(['["a"', '"b"]']);
+  });
+
+  it("drops an oversized header whole instead of truncating a name", () => {
+    const big = "a,".repeat(MAX_GROUPS_HEADER_BYTES);
+    expect(groupsOf(big)).toEqual([]);
   });
 
   it("userId '__proto__' cannot poison a Map-based userIndex", () => {
@@ -150,12 +193,15 @@ describe("multi-tenancy — honest proxy (headers set per authenticated user)", 
     expect(anon.sent).toHaveLength(0);
   });
 
-  it("username-cast fallback does not match anonymous clients", () => {
+  it("login-cast fallback does not match anonymous clients", () => {
     const ctx = setupCtx();
     const anon = ctx.addClient("X1");
-    const alice = ctx.addClient("A1", { "x-portal-user-username": "alice" });
+    const alice = ctx.addClient("A1", {
+      "x-portal-user-id": "u-alice",
+      "x-portal-user-login": "alice",
+    });
 
-    const r = route({ payload: "s", _client: { username: "alice" } }, ctx);
+    const r = route({ payload: "s", _client: { login: "alice" } }, ctx);
     expect(r.delivered).toBe(1);
     expect(alice.sent).toHaveLength(1);
     expect(anon.sent).toHaveLength(0);
@@ -178,12 +224,13 @@ describe("multi-tenancy — forged headers (proxy bypassed / not stripping)", ()
     expect(attacker.sent).toHaveLength(1); // interception — proxy must prevent
   });
 
-  it("forged x-portal-user-username intercepts username-cast fallback", () => {
+  it("forged x-portal-user-login intercepts login-cast fallback", () => {
     const ctx = setupCtx();
     const attacker = ctx.addClient("E1", {
-      "x-portal-user-username": "alice",
+      "x-portal-user-id": "mallory",
+      "x-portal-user-login": "alice",
     });
-    route({ payload: "secret", _client: { username: "alice" } }, ctx);
+    route({ payload: "secret", _client: { login: "alice" } }, ctx);
     expect(attacker.sent).toHaveLength(1);
   });
 
