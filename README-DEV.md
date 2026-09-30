@@ -421,8 +421,9 @@ all browser conveniences layered on top of these frames.
   single `RED.server.on("upgrade")` listener per node id routes only its own
   `wsPath` to its `ws.Server`.
 - **Identity on connect**: a fresh `portalClient` UUID is assigned; if Portal Auth
-  is on, `ws._portalUser` is built from `x-portal-user-*` headers and indexed by
-  `userId` for O(1) user-cast.
+  is on, `ws._portalUser` is built from the percent-encoded `x-portal-user-*`
+  headers (null without `x-portal-user-id`) and indexed by `userId` for O(1)
+  user-cast.
 - **Heartbeat is centralised**: instead of N per-client `setInterval(ping, 30s)`,
   one shared module-level tick (`_pingSweep`) walks every registered `ws.Server`
   every 30 s, terminates sockets that missed the previous ping, and pings the
@@ -441,7 +442,7 @@ flowchart TD
   Q1 -->|yes| U["unicast → that one session"]
   Q1 -->|no| Q2{"_client.userId?"}
   Q2 -->|yes| UC["user-cast (O(1) via userIndex)"]
-  Q2 -->|no| Q3{"_client.username?"}
+  Q2 -->|no| Q3{"_client.login?"}
   Q3 -->|yes| UCN["user-cast fallback (O(N) scan)"]
   Q3 -->|no| Q4{"_client.authenticated?"}
   Q4 -->|truthy| AC["auth-cast → sessions with a portal user"]
@@ -635,7 +636,8 @@ reverse proxy.
   state on every inbound frame; the browser cannot forge it. `x-portal-user-*`
   headers are trusted **unconditionally**, so production must terminate auth at a
   reverse proxy that strips inbound identity headers before injecting verified
-  ones. The `x-portal-user-groups` JSON is size-capped (8 KB) before `JSON.parse`.
+  ones — all six of them. An `x-portal-user-groups` header over 8 KB is dropped
+  whole, never truncated into a shortened group name.
 - **Name validation** — component/utility names must be valid JS identifiers
   ≤ 64 chars and are blacklisted against `Object.prototype` keys (prototype
   pollution guard). Sub-paths reserve `public` and `_ws` and block traversal.

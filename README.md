@@ -152,18 +152,22 @@ Portal-react has four routing modes — broadcast, auth-cast (every authenticate
 | Identifier | Scope | Persistence | Source |
 |---|---|---|---|
 | `portalClient` | Single WS session (one tab) | Lost on reconnect — server assigns a new UUID | Generated server-side on connect |
-| `userId` / `username` | All sessions of a user | Survives reconnect and new tabs | `x-portal-user-*` headers (when **Portal Auth** is enabled) |
+| `userId` / `login` | All sessions of a user | Survives reconnect and new tabs | `x-portal-user-*` headers (when **Portal Auth** is enabled) |
 
-**Portal Auth header contract** — injected by an upstream reverse proxy such as `aaqu-portal-auth`:
+**Portal Auth header contract** — injected by an upstream reverse proxy (the [fromcubes-portal](https://github.com/Aaqu/fromcubes-portal) platform sets them from Traefik forward-auth). Every value is percent-encoded UTF-8 (`%C5%81ukasz` → `Łukasz`); the same field names appear in `useNodeRed().user` and `msg._client`:
 
 | Header | Field |
 |---|---|
-| `x-portal-user-id` | `userId` |
-| `x-portal-user-name` | `userName` |
-| `x-portal-user-username` | `username` |
+| `x-portal-user-id` | `userId` — required; without it the session is anonymous |
+| `x-portal-user-login` | `login` |
+| `x-portal-user-display-name` | `displayName` |
 | `x-portal-user-email` | `email` |
-| `x-portal-user-role` | `role` |
-| `x-portal-user-groups` | `groups` (JSON array) |
+| `x-portal-user-role` | `role` (single value) |
+| `x-portal-user-groups` | `groups` — comma-separated, each element encoded on its own (`a%2Cb` is one group `a,b`); always an array, `[]` when absent |
+
+A value with a malformed escape is skipped (in `groups`, only that element). Without `x-portal-user-id` the session is anonymous and `user` is `null`, whatever other headers arrive. The pre-contract `x-portal-user-username` / `x-portal-user-name` headers are ignored.
+
+**The proxy must strip all six headers from the client's request** before injecting its own. The package trusts them as they arrive; one header let through is enough to impersonate any user.
 
 If Portal Auth is disabled or headers are absent, `user` is `null` and user-scoped features are silently skipped — broadcast and per-session features still work.
 
@@ -273,7 +277,7 @@ Import **Shared Components** first — it provides the UI building blocks (Page,
 | WebSocket reconnects in an endless loop | Reverse-proxy is not forwarding `Upgrade: websocket` on `/fromcubes/<sub-path>/_ws`. Check the proxy config — nginx needs `proxy_set_header Upgrade $http_upgrade`, Traefik needs the `websocket` middleware. |
 | `libs` packages fail to install on deploy | The user-installed npm packages declared in **Libs** install via Node-RED's `dynamicModuleList` mechanism, which needs network access from `userDir` and a writable `node_modules`. Behind a corporate proxy set `npm config set proxy …` for the Node-RED user. |
 | Page loads but `data` stays `null` | Nothing has been pushed since the page connected — payloads are not cached server-side. Push periodically, or request initial state from the component (`send({}, "init")` → flow replies) |
-| `user` is `null` even with Portal Auth on | Upstream proxy is not injecting `x-portal-user-*` headers |
+| `user` is `null` even with Portal Auth on | Upstream proxy is not injecting `x-portal-user-id` (required — the other headers alone count as anonymous), or sends a malformed percent-escape in it |
 | Page reloads on every deploy | Expected for code changes; clients soft-reconnect with exponential backoff |
 
 ## Architecture: source AND sink
@@ -310,8 +314,9 @@ behind a reverse proxy. Highlights:
   5 MB), 100 MB asset-upload cap, 500 MB / 1000 files total
   assets quota, 1 MB WebSocket frame cap.
 - `x-portal-user-*` identity headers are trusted unconditionally — production
-  deployments **must** terminate auth at a reverse proxy that strips inbound
-  identity headers before injecting verified ones.
+  deployments **must** terminate auth at a reverse proxy that strips all six
+  inbound identity headers before injecting verified ones, and Node-RED must
+  not be reachable except through that proxy.
 
 ## License
 
