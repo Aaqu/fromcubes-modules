@@ -4,7 +4,8 @@ React portals for Node-RED — write JSX in the editor, deploy, open the URL; th
 page talks to your flow over WebSocket. No build step, no browser compiler.
 
 **📖 Documentation:** [aaqu.github.io/fromcubes-modules](https://aaqu.github.io/fromcubes-modules/) ·
-**💬 Discord:** [join](https://discord.gg/KYzsfKkYxX)
+**💬 Discord:** [join](https://discord.gg/KYzsfKkYxX) ·
+**❤️ Sponsor:** [GitHub Sponsors](https://github.com/sponsors/Aaqu) or [Ko-fi](https://ko-fi.com/L4L01UOFRG)
 
 > **⚠️ Alpha** — early development, expect breaking changes.
 

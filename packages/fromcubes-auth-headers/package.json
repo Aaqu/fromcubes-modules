@@ -37,10 +37,16 @@
     "url": "https://github.com/Aaqu/fromcubes-modules/issues"
   },
   "homepage": "https://aaqu.github.io/fromcubes-modules/",
-  "funding": {
-    "type": "ko-fi",
-    "url": "https://ko-fi.com/L4L01UOFRG"
-  },
+  "funding": [
+    {
+      "type": "github",
+      "url": "https://github.com/sponsors/Aaqu"
+    },
+    {
+      "type": "ko-fi",
+      "url": "https://ko-fi.com/L4L01UOFRG"
+    }
+  ],
   "license": "Apache-2.0",
   "author": {
     "name": "Aaqu",
