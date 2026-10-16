@@ -56,13 +56,13 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aaqu/fromcubes.git",
+    "url": "git+https://github.com/Aaqu/fromcubes-modules.git",
     "directory": "packages/fromcubes-react"
   },
   "bugs": {
-    "url": "https://github.com/Aaqu/fromcubes/issues"
+    "url": "https://github.com/Aaqu/fromcubes-modules/issues"
   },
-  "homepage": "https://aaqu.github.io/fromcubes/",
+  "homepage": "https://aaqu.github.io/fromcubes-modules/",
   "funding": {
     "type": "ko-fi",
     "url": "https://ko-fi.com/L4L01UOFRG"

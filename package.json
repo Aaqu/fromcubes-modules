@@ -1,5 +1,5 @@
 {
-  "name": "fromcubes",
+  "name": "fromcubes-modules",
   "private": true,
   "description": "Fromcubes monorepo: @aaqu/fromcubes-react and its add-ons",
   "workspaces": [
@@ -26,7 +26,7 @@
   },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aaqu/fromcubes.git"
+    "url": "git+https://github.com/Aaqu/fromcubes-modules.git"
   },
   "license": "Apache-2.0",
   "author": {

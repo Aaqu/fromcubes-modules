@@ -650,7 +650,7 @@ reverse proxy.
 
 ## Repository layout
 
-The repository (`fromcubes`) is an npm-workspaces monorepo:
+The repository (`fromcubes-modules`) is an npm-workspaces monorepo:
 
 ```
 packages/
