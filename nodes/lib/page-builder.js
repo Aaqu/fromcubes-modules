@@ -263,6 +263,14 @@ function buildPage(title, transpiledJs, wsPath, customHead, cssHash, user, showW
                     this._authListeners.forEach(fn => fn(false));
                   }
                 }
+                if (m.type === 'reload') {
+                  // Identity provider changed on the server: the user baked
+                  // into this page is stale. The server closes the socket
+                  // right after this frame regardless, so a client that
+                  // ignores it keeps no identity it should not have.
+                  location.reload();
+                  return;
+                }
                 if (m.type === 'auth_required') {
                   this._authRequired = true;
                   this._authListeners.forEach(fn => fn(true));

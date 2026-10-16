@@ -17,14 +17,19 @@
  *     generate(source) { return { css } },
  *   })
  *
- * The built-in providers (`headers`, `tailwind`, `none`) are defined with the
- * same shape and pass through the same validation, so the API is exercised by
- * our own code on every request and every build.
+ * The built-in providers (`headers` and `none` for identity, `tailwind` and
+ * `none` for css) are defined with the same shape and pass through the same
+ * validation, so the API is exercised by our own code on every request and
+ * every build.
  *
- * Selection is explicit: `RED.settings.portalReact.identityProvider` and
- * `RED.settings.portalReact.cssEngine` name a provider by id, defaulting to
- * `headers` and `tailwind`. Installing a plugin never switches anything on its
- * own — for identity that would let a package change who counts as logged in.
+ * Selection is explicit, exactly one provider per kind, first match wins:
+ *   1. `RED.settings.portalReact.identityProvider` / `.cssEngine` (settings.js)
+ *      — the administrator's word; the editor shows it locked.
+ *   2. The choice made in the editor (Settings → Fromcubes), persisted in
+ *      `<userDir>/fromcubes/providers.json`.
+ *   3. The defaults, `headers` and `tailwind`.
+ * Installing a plugin never switches anything on its own — for identity that
+ * would let a package change who counts as logged in.
  *
  * Failure semantics:
  * - identity: unknown provider, wrong apiVersion, throw, timeout or a result
@@ -51,6 +56,30 @@ const MAX_GROUPS = 4096;
 const IDENTITY_TIMEOUT_MS = 5000;
 
 const USER_STRING_FIELDS = ["login", "displayName", "email", "role"];
+
+const KINDS = {
+  identity: { type: IDENTITY_TYPE, setting: "identityProvider", fallback: DEFAULT_IDENTITY },
+  css: { type: CSS_TYPE, setting: "cssEngine", fallback: DEFAULT_CSS },
+};
+
+// Provider ids travel through the settings file, the admin API and the
+// editor's DOM. Plugin ids are free-form in Node-RED; anything outside this
+// shape can be registered but not selected.
+const PROVIDER_ID_RE = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
+
+/**
+ * Error from `select()`, with a code the admin API maps to an HTTP status.
+ */
+class ProviderSelectError extends Error {
+  /**
+   * @param {"bad-kind"|"bad-id"|"locked"|"unknown"} code
+   * @param {string} message
+   */
+  constructor(code, message) {
+    super(message);
+    this.code = code;
+  }
+}
 
 /**
  * @param {*} v
@@ -98,7 +127,15 @@ function builtinProviders(helpers) {
         id: "headers",
         type: IDENTITY_TYPE,
         apiVersion: API_VERSION,
+        label: "x-portal-user-* headers from a reverse proxy",
         resolveUser: (req) => helpers.extractPortalUser(req.headers || {}),
+      },
+      none: {
+        id: "none",
+        type: IDENTITY_TYPE,
+        apiVersion: API_VERSION,
+        label: "Nobody is identified — every session is anonymous",
+        resolveUser: () => null,
       },
     },
     css: {
@@ -106,6 +143,7 @@ function builtinProviders(helpers) {
         id: "tailwind",
         type: CSS_TYPE,
         apiVersion: API_VERSION,
+        label: "Tailwind CSS 4 utility classes",
         generate: async (source) => {
           const { css } = await helpers.generateCSS(source);
           return { css };
@@ -115,6 +153,7 @@ function builtinProviders(helpers) {
         id: "none",
         type: CSS_TYPE,
         apiVersion: API_VERSION,
+        label: "No stylesheet",
         generate: () => ({ css: "" }),
       },
     },
@@ -126,18 +165,28 @@ function builtinProviders(helpers) {
  *
  * @param {Object} RED
  * @param {{ extractPortalUser: Function, generateCSS: Function }} helpers
- * @param {{ identityTimeoutMs?: number }} [opts]
+ * @param {{ identityTimeoutMs?: number, storeFile?: string }} [opts]
+ *   `storeFile`: where the editor's choice is persisted; without it the
+ *   choice lives in memory only (tests, embedded use).
  * @returns {{
  *   resolveUser: function(Object): Promise<Object|null>,
  *   generateCss: function(string): Promise<{css: string}>,
  *   identityId: function(): string,
  *   cssEngineId: function(): string,
+ *   describe: function(): Object,
+ *   select: function(string, string): boolean,
  * }}
  */
 function createProviders(RED, helpers, opts = {}) {
+  const fs = require("fs");
+  const path = require("path");
   const builtins = builtinProviders(helpers);
+  const tables = { identity: builtins.identity, css: builtins.css };
   const identityTimeoutMs = opts.identityTimeoutMs ?? IDENTITY_TIMEOUT_MS;
+  const storeFile = opts.storeFile || null;
   const logged = new Set();
+  /** @type {{identity?: string, css?: string}} */
+  const chosen = loadChoice();
 
   /**
    * Log a configuration problem once per process — these are evaluated per
@@ -157,6 +206,82 @@ function createProviders(RED, helpers, opts = {}) {
   }
 
   /**
+   * Read the editor's persisted choice. A missing file is the normal first
+   * run; a malformed one is reported and ignored (defaults apply) rather
+   * than stopping Node-RED.
+   * @returns {{identity?: string, css?: string}}
+   */
+  function loadChoice() {
+    if (!storeFile) return {};
+    let raw;
+    try {
+      raw = fs.readFileSync(storeFile, "utf8");
+    } catch (e) {
+      if (e.code !== "ENOENT") {
+        RED.log.warn(`[portal-react] cannot read ${storeFile}: ${e.message}`);
+      }
+      return {};
+    }
+    let data;
+    try {
+      data = JSON.parse(raw);
+    } catch (e) {
+      RED.log.warn(`[portal-react] ignoring malformed ${storeFile}: ${e.message}`);
+      return {};
+    }
+    const out = {};
+    if (data && typeof data === "object") {
+      for (const kind of Object.keys(KINDS)) {
+        if (typeof data[kind] === "string" && PROVIDER_ID_RE.test(data[kind])) {
+          out[kind] = data[kind];
+        }
+      }
+    }
+    return out;
+  }
+
+  /**
+   * Persist the choice atomically: a crash mid-write must not leave a
+   * half-written file that silently resets identity to the default.
+   * @returns {void}
+   */
+  function saveChoice() {
+    if (!storeFile) return;
+    fs.mkdirSync(path.dirname(storeFile), { recursive: true });
+    const tmp = storeFile + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify(chosen, null, 2) + "\n", "utf8");
+    fs.renameSync(tmp, storeFile);
+  }
+
+  /**
+   * The provider id in force for `kind`, and where it came from.
+   * @param {"identity"|"css"} kind
+   * @returns {{ id: string, source: "settings"|"editor"|"default" }}
+   */
+  function current(kind) {
+    const k = KINDS[kind];
+    const fromSettings = cfg()[k.setting];
+    if (typeof fromSettings === "string" && fromSettings) {
+      return { id: fromSettings, source: "settings" };
+    }
+    if (chosen[kind]) return { id: chosen[kind], source: "editor" };
+    return { id: k.fallback, source: "default" };
+  }
+
+  /**
+   * Plugins registered with Node-RED for `type`. Never throws.
+   * @param {string} type
+   * @returns {Array<Object>}
+   */
+  function pluginsOf(type) {
+    try {
+      return ((RED.plugins && RED.plugins.getByType(type)) || []).filter(Boolean);
+    } catch (_) {
+      return [];
+    }
+  }
+
+  /**
    * Find the provider `id` of `type`: built-ins first (their ids are
    * reserved), then plugins registered with Node-RED.
    *
@@ -166,12 +291,7 @@ function createProviders(RED, helpers, opts = {}) {
    * @returns {{ provider: Object|null, error: string|null }}
    */
   function lookup(type, table, id) {
-    let plugins = [];
-    try {
-      plugins = (RED.plugins && RED.plugins.getByType(type)) || [];
-    } catch (_) {
-      plugins = [];
-    }
+    const plugins = pluginsOf(type);
     // Scanned before the built-in short-circuit: a plugin shadowing a
     // built-in id must be reported even while the built-in is in use.
     for (const p of plugins) {
@@ -197,14 +317,96 @@ function createProviders(RED, helpers, opts = {}) {
 
   /** @returns {string} */
   function identityId() {
-    const id = cfg().identityProvider;
-    return typeof id === "string" && id ? id : DEFAULT_IDENTITY;
+    return current("identity").id;
   }
 
   /** @returns {string} */
   function cssEngineId() {
-    const id = cfg().cssEngine;
-    return typeof id === "string" && id ? id : DEFAULT_CSS;
+    return current("css").id;
+  }
+
+  /**
+   * Everything the editor's settings pane needs: per kind, what is in force,
+   * where it came from, whether it can be changed, and every provider that
+   * could be chosen. A selected id that is no longer registered stays in
+   * the list, flagged `missing`, so the editor can say so instead of
+   * silently showing nothing selected.
+   *
+   * @returns {Object<string, {selected: string, source: string, locked: boolean, missing: boolean,
+   *   options: Array<{id: string, label: string, module: string, builtin: boolean, missing?: boolean, problem?: string}>}>}
+   */
+  function describe() {
+    const out = {};
+    for (const [kind, k] of Object.entries(KINDS)) {
+      const table = tables[kind];
+      const options = Object.values(table).map((p) => ({
+        id: p.id,
+        label: p.label || "",
+        module: "built-in",
+        builtin: true,
+      }));
+      const seen = new Set(options.map((o) => o.id));
+      for (const p of pluginsOf(k.type)) {
+        if (typeof p.id !== "string" || seen.has(p.id)) continue;
+        seen.add(p.id);
+        const opt = {
+          id: p.id,
+          label: typeof p.label === "string" ? p.label : "",
+          module: typeof p.module === "string" ? p.module : "",
+          builtin: false,
+        };
+        if (p.apiVersion !== API_VERSION) {
+          opt.problem = `apiVersion ${JSON.stringify(p.apiVersion)}, expected ${API_VERSION}`;
+        } else if (!PROVIDER_ID_RE.test(p.id)) {
+          opt.problem = "id cannot be selected (letters, digits, . _ - only)";
+        }
+        options.push(opt);
+      }
+      const { id, source } = current(kind);
+      const missing = !seen.has(id);
+      if (missing) {
+        options.push({ id, label: "", module: "", builtin: false, missing: true });
+      }
+      out[kind] = { selected: id, source, locked: source === "settings", missing, options };
+    }
+    return out;
+  }
+
+  /**
+   * Choose the provider for `kind` from the editor and persist it. Only a
+   * provider that is registered and usable right now can be chosen.
+   *
+   * @param {string} kind  "identity" | "css"
+   * @param {string} id
+   * @returns {boolean}    true when the provider in force changed.
+   * @throws {ProviderSelectError}
+   */
+  function select(kind, id) {
+    if (!Object.prototype.hasOwnProperty.call(KINDS, kind)) {
+      throw new ProviderSelectError("bad-kind", `unknown provider kind "${kind}"`);
+    }
+    if (typeof id !== "string" || !PROVIDER_ID_RE.test(id)) {
+      throw new ProviderSelectError("bad-id", "invalid provider id");
+    }
+    const before = current(kind);
+    if (before.source === "settings") {
+      throw new ProviderSelectError(
+        "locked",
+        `${kind} provider is set in settings.js (portalReact.${KINDS[kind].setting})`,
+      );
+    }
+    const { provider, error } = lookup(KINDS[kind].type, tables[kind], id);
+    if (!provider) throw new ProviderSelectError("unknown", error);
+    const prev = chosen[kind];
+    chosen[kind] = id;
+    try {
+      saveChoice();
+    } catch (e) {
+      if (prev === undefined) delete chosen[kind];
+      else chosen[kind] = prev;
+      throw e;
+    }
+    return before.id !== id;
   }
 
   /**
@@ -265,12 +467,14 @@ function createProviders(RED, helpers, opts = {}) {
     return { css: out.css };
   }
 
-  return { resolveUser, generateCss, identityId, cssEngineId };
+  return { resolveUser, generateCss, identityId, cssEngineId, describe, select };
 }
 
 module.exports = {
   createProviders,
   sanitizeUser,
+  ProviderSelectError,
+  PROVIDER_ID_RE,
   IDENTITY_TYPE,
   CSS_TYPE,
   API_VERSION,

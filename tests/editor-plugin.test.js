@@ -399,3 +399,23 @@ test("portal-react.html loads both editor scripts and the stylesheet", () => {
   // The overlay reuses the dialog's registry-name cache refresher.
   expect(html).toContain("window.__fcRefreshComponentNames = refreshComponentNames");
 });
+
+// ── Settings → Fromcubes (provider choice) ────────────────────
+
+test("serves the provider settings pane and portal-react.html loads it", async () => {
+  const res = await request(app).get("/portal-react/editor/provider-settings.js");
+  expect(res.status).toBe(200);
+  expect(res.text).toContain("RED.userSettings.add");
+  // Node-RED shows a settings pane by this exact element id.
+  expect(res.text).toContain('"red-ui-settings-tab-" + PANE_ID');
+  expect(res.text).toContain('"portal-react/providers"');
+
+  const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
+  expect(html).toContain('src="portal-react/editor/provider-settings.js"');
+});
+
+test("portal page reloads on the server's identity-change frame", () => {
+  const { buildPage } = require("../nodes/lib/page-builder");
+  const html = buildPage("T", "", "/fromcubes/x/_ws", "", "", null, false, "");
+  expect(html).toMatch(/m\.type === 'reload'\)\s*\{\s*(\/\/[^\n]*\n\s*)*location\.reload\(\)/);
+});

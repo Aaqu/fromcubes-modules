@@ -259,11 +259,19 @@ module.exports = function (RED) {
 };
 ```
 
-Installing a plugin does not activate it — choose it in `settings.js`:
+Installing a plugin does not activate it. Choose one per kind in the editor,
+**Menu → Settings → Fromcubes**: every installed provider is listed with the
+package it comes from, and exactly one is selected. The choice is saved in
+`<userDir>/fromcubes/providers.json` and applies at once — a new CSS engine
+rebuilds every portal; a new identity provider asks for confirmation, then
+reloads every open portal tab so page and connection both use it.
+
+An administrator can pin either choice in `settings.js`; the editor then shows
+it locked:
 
 ```js
 portalReact: {
-  identityProvider: "my-sso",   // default "headers"
+  identityProvider: "my-sso",   // default "headers"; "none" = everyone anonymous
   cssEngine: "my-css",          // default "tailwind"; "none" serves no stylesheet
 },
 ```
@@ -274,7 +282,9 @@ portalReact: {
 - `generate` returns `{ css }`. A failure shows the yellow `css-fail` status
   and the page is served unstyled.
 - An unknown provider name is logged once; for identity every session is then
-  anonymous.
+  anonymous. The settings pane flags a selected provider whose package is gone.
+- Optional `label: "…"` on the plugin is shown next to its id in the settings
+  pane.
 
 ## Portal Assets
 

@@ -383,3 +383,162 @@ describe("css engine failure rejects", () => {
     expect(await p.generateCss("x")).toEqual({ css: "a{}" });
   });
 });
+
+// ── Choice: settings.js > editor (providers.json) > default ──
+
+const fs = require("fs");
+const os = require("os");
+const path = require("path");
+const { ProviderSelectError } = require("../nodes/lib/providers");
+
+describe("choice made in the editor", () => {
+  let dir;
+  let file;
+  beforeEach(() => {
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), "providers-test-"));
+    file = path.join(dir, "fromcubes", "providers.json");
+  });
+  afterEach(() => fs.rmSync(dir, { recursive: true, force: true }));
+
+  const withStore = (opts) => {
+    const RED = fakeRED(opts);
+    return { RED, p: createProviders(RED, fakeHelpers, { storeFile: file }) };
+  };
+
+  it("select() switches, persists, and survives a restart", async () => {
+    const sso = identityPlugin("sso", () => ({ userId: "s1" }));
+    const { p } = withStore({ plugins: [sso] });
+    expect(p.select("identity", "sso")).toBe(true);
+    expect(p.identityId()).toBe("sso");
+    expect(JSON.parse(fs.readFileSync(file, "utf8"))).toEqual({ identity: "sso" });
+
+    const { p: again } = withStore({ plugins: [sso] });
+    expect(again.identityId()).toBe("sso");
+    expect(await again.resolveUser(req())).toEqual({ userId: "s1", groups: [] });
+  });
+
+  it("select() of the provider already in force reports no change", () => {
+    const { p } = withStore();
+    expect(p.select("css", "tailwind")).toBe(false);
+    expect(p.select("css", "none")).toBe(true);
+    expect(p.select("css", "none")).toBe(false);
+  });
+
+  it("built-in identity 'none' makes every session anonymous", async () => {
+    const { p } = withStore();
+    p.select("identity", "none");
+    expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
+  });
+
+  it("settings.js wins over the editor's choice and locks it", () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, JSON.stringify({ css: "none" }));
+    const { p } = withStore({ settings: { cssEngine: "tailwind" } });
+    expect(p.cssEngineId()).toBe("tailwind");
+    expect(() => p.select("css", "none")).toThrow(ProviderSelectError);
+    try {
+      p.select("css", "none");
+    } catch (e) {
+      expect(e.code).toBe("locked");
+      expect(e.message).toMatch(/portalReact\.cssEngine/);
+    }
+    // The other kind is not locked.
+    expect(p.select("identity", "none")).toBe(true);
+  });
+
+  it("rejects what cannot be chosen, leaving the file untouched", () => {
+    const old = identityPlugin("old", () => null, { apiVersion: 0 });
+    const shadow = identityPlugin("headers", () => ({ userId: "admin" }));
+    const { p } = withStore({ plugins: [old, shadow] });
+    const codeOf = (kind, id) => {
+      try {
+        p.select(kind, id);
+      } catch (e) {
+        return e.code;
+      }
+      return "ok";
+    };
+    expect(codeOf("theme", "dark")).toBe("bad-kind");
+    expect(codeOf("__proto__", "x")).toBe("bad-kind");
+    expect(codeOf("identity", "")).toBe("bad-id");
+    expect(codeOf("identity", 5)).toBe("bad-id");
+    expect(codeOf("identity", "../etc")).toBe("bad-id");
+    expect(codeOf("identity", "<b>")).toBe("bad-id");
+    expect(codeOf("identity", "ghost")).toBe("unknown");
+    expect(codeOf("identity", "old")).toBe("unknown");
+    expect(codeOf("css", "headers")).toBe("unknown");
+    expect(fs.existsSync(file)).toBe(false);
+    expect(p.identityId()).toBe("headers");
+  });
+
+  it("a failed write keeps the previous choice in force", () => {
+    const { p } = withStore();
+    p.select("css", "none");
+    // A directory where the temp file should go makes the write fail.
+    fs.mkdirSync(file + ".tmp");
+    expect(() => p.select("css", "tailwind")).toThrow();
+    expect(p.cssEngineId()).toBe("none");
+  });
+
+  it("malformed or hostile file content is ignored", () => {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    for (const content of ["{not json", "null", "[]", '"sso"']) {
+      fs.writeFileSync(file, content);
+      const { p } = withStore();
+      expect(p.identityId()).toBe("headers");
+      expect(p.cssEngineId()).toBe("tailwind");
+    }
+    fs.writeFileSync(file, JSON.stringify({ identity: "../x", css: 5, other: "y" }));
+    const { p, RED } = withStore();
+    expect(p.identityId()).toBe("headers");
+    expect(p.cssEngineId()).toBe("tailwind");
+    expect(RED._logs.error).toEqual([]);
+  });
+
+  it("without a store file the choice lives in memory", () => {
+    const { p } = make();
+    expect(p.select("css", "none")).toBe(true);
+    expect(p.cssEngineId()).toBe("none");
+  });
+});
+
+describe("describe()", () => {
+  it("lists built-ins and plugins, with module and problems", () => {
+    const sso = identityPlugin("sso", () => null, { module: "sso-pkg", label: "Company SSO" });
+    const old = identityPlugin("old", () => null, { apiVersion: 2, module: "old-pkg" });
+    const odd = identityPlugin("has space", () => null, { module: "odd-pkg" });
+    const shadow = identityPlugin("headers", () => null, { module: "evil-pkg" });
+    const uno = cssPlugin("uno", () => ({ css: "" }), { module: "uno-pkg" });
+    const { p } = make({ plugins: [sso, old, odd, shadow, uno] });
+    const d = p.describe();
+
+    expect(d.identity).toMatchObject({ selected: "headers", source: "default", locked: false, missing: false });
+    expect(d.identity.options.map((o) => o.id)).toEqual(["headers", "none", "sso", "old", "has space"]);
+    expect(d.identity.options[0]).toMatchObject({ module: "built-in", builtin: true });
+    expect(d.identity.options[2]).toEqual({ id: "sso", label: "Company SSO", module: "sso-pkg", builtin: false });
+    expect(d.identity.options[3].problem).toMatch(/apiVersion 2/);
+    expect(d.identity.options[4].problem).toMatch(/cannot be selected/);
+    // The shadowing plugin is not offered — the built-in owns the id.
+    expect(d.identity.options.filter((o) => o.id === "headers")).toHaveLength(1);
+
+    expect(d.css.options.map((o) => o.id)).toEqual(["tailwind", "none", "uno"]);
+  });
+
+  it("reports source and lock", () => {
+    const { p } = make({ settings: { identityProvider: "none" } });
+    p.select("css", "none");
+    const d = p.describe();
+    expect(d.identity).toMatchObject({ selected: "none", source: "settings", locked: true });
+    expect(d.css).toMatchObject({ selected: "none", source: "editor", locked: false });
+  });
+
+  it("a selected provider that is gone stays listed, flagged missing", () => {
+    const plugins = [identityPlugin("sso", () => null, { module: "sso-pkg" })];
+    const { p } = make({ plugins });
+    p.select("identity", "sso");
+    plugins.length = 0; // package uninstalled
+    const d = p.describe();
+    expect(d.identity.missing).toBe(true);
+    expect(d.identity.options.at(-1)).toMatchObject({ id: "sso", missing: true });
+  });
+});

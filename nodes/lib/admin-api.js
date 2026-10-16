@@ -19,6 +19,8 @@ const path = require("path");
  * @param {Object<string, Object>} deps.registry
  * @param {Object<string, Object>} deps.utilities
  * @param {(code: string) => Set<string>} deps.extractUtilitySymbols
+ * @param {Object} [deps.providers]          lib/providers registry (describe/select).
+ * @param {Function} [deps.onProviderChange] Called with the kind after a choice changed.
  * @returns {void}
  */
 function registerAdminApi(RED, deps) {
@@ -33,6 +35,8 @@ function registerAdminApi(RED, deps) {
     registry,
     utilities,
     extractUtilitySymbols,
+    providers,
+    onProviderChange,
   } = deps;
 
   // Since 0.56 monaco-editor has an `exports` map that hides package.json;
@@ -174,6 +178,64 @@ function registerAdminApi(RED, deps) {
       res.status(410).json({
         error: "utility writes are deprecated; use fc-portal-utility nodes",
       });
+    },
+  );
+
+  if (providers) registerProviderRoutes(RED, deps);
+}
+
+// select() error code → HTTP status
+const SELECT_STATUS = { "bad-kind": 400, "bad-id": 400, unknown: 400, locked: 409 };
+
+/**
+ * Settings → Fromcubes: read and change the identity provider and CSS engine.
+ * Changing identity decides who counts as logged in, so the write sits
+ * behind the same permission, CSRF and rate-limit gates as every other
+ * admin write, and is logged with the editor user who made it.
+ *
+ * @param {Object} RED
+ * @param {Object} deps  See registerAdminApi.
+ * @returns {void}
+ * @private
+ */
+function registerProviderRoutes(RED, deps) {
+  const { express, permRead, permWrite, csrfGuard, rateLimit, providers, onProviderChange } = deps;
+  // Node-RED's admin app parses JSON already (capped by apiMaxLength); parse
+  // only where nothing upstream did — the same arrangement as lib/assets.js.
+  const parseJson = express.json({ limit: (RED.settings && RED.settings.apiMaxLength) || "5mb" });
+  const jsonBody = (req, res, next) => (req._body ? next() : parseJson(req, res, next));
+
+  RED.httpAdmin.get("/portal-react/providers", permRead, (_req, res) => {
+    res.json(providers.describe());
+  });
+
+  RED.httpAdmin.put(
+    "/portal-react/providers",
+    permWrite,
+    csrfGuard,
+    rateLimit,
+    jsonBody,
+    (req, res) => {
+      const { kind, id } = req.body || {};
+      let changed;
+      try {
+        changed = providers.select(kind, id);
+      } catch (e) {
+        const status = SELECT_STATUS[e.code];
+        if (!status) {
+          RED.log.error("[portal-react] saving provider choice failed: " + e.message);
+          res.status(500).json({ error: "could not save the provider choice" });
+          return;
+        }
+        res.status(status).json({ error: e.message, code: e.code });
+        return;
+      }
+      if (changed) {
+        const who = (req.user && req.user.username) || "anonymous editor";
+        RED.log.warn(`[portal-react] ${kind} provider set to "${id}" by ${who}`);
+        if (onProviderChange) onProviderChange(kind);
+      }
+      res.json(providers.describe());
     },
   );
 }

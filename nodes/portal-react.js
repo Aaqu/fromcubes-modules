@@ -520,7 +520,35 @@ module.exports = function (RED) {
     deleteCacheFiles,
     isHashInUse,
   } = helpers;
-  const providers = require("./lib/providers").createProviders(RED, helpers);
+  const providers = require("./lib/providers").createProviders(RED, helpers, {
+    storeFile: require("path").join(userDir, "fromcubes", "providers.json"),
+  });
+
+  // nodeId → function that drops every live session of that portal. Used
+  // when the identity provider changes: a socket opened under the old
+  // provider must not keep the user it resolved to.
+  if (!RED.settings.portalReactSessionResetters) {
+    RED.settings.portalReactSessionResetters = {};
+  }
+  const sessionResetters = RED.settings.portalReactSessionResetters;
+
+  /**
+   * React to a provider chosen in the editor. Identity: every session of
+   * every portal reloads and reconnects, so page and socket both pick up
+   * the new provider. CSS: every portal rebuilds (the engine is part of the
+   * build hash, so nothing stale is reused).
+   * @param {"identity"|"css"} kind
+   * @returns {void}
+   */
+  function onProviderChange(kind) {
+    if (kind === "identity") {
+      for (const reset of Object.values(sessionResetters)) {
+        try { reset(); } catch (e) { RED.log.warn("[portal-react] session reset: " + e.message); }
+      }
+    } else if (kind === "css") {
+      for (const nodeId of Object.keys(rebuildCallbacks)) scheduleRebuildSelf(nodeId);
+    }
+  }
   const { buildPage, buildErrorPage } = require("./lib/page-builder");
   const { createPortalPageHandler } = require("./lib/portal-page-route");
   const {
@@ -1315,8 +1343,6 @@ module.exports = function (RED) {
         customHead,
         String(portalAuth),
         String(showWsStatus),
-        providers.identityId(),
-        providers.cssEngineId(),
       ].join("\0"),
     );
     const prevSig = portalSig[nodeId];
@@ -1406,6 +1432,13 @@ module.exports = function (RED) {
 
         RED.server.on("upgrade", onUpgrade);
         upgradeHandlers[nodeId] = onUpgrade;
+
+        sessionResetters[nodeId] = () => {
+          clients.forEach((ws) => {
+            wsSend(ws, { type: "reload" });
+            try { ws.close(1012, "identity provider changed"); } catch (e) { RED.log.trace("[portal-react] ws close: " + e.message); }
+          });
+        };
 
         wsServer.on("connection", (ws, _request, user) => {
           if (isClosing) {
@@ -1642,6 +1675,7 @@ module.exports = function (RED) {
           }
 
           // Unregister rebuild callback + selective-rebuild metadata
+          delete sessionResetters[nodeId];
           delete rebuildCallbacks[nodeId];
           delete portalNeeded[nodeId];
           delete portalNeededUtilities[nodeId];
@@ -1736,5 +1770,7 @@ module.exports = function (RED) {
     registry,
     utilities,
     extractUtilitySymbols,
+    providers,
+    onProviderChange,
   });
 };

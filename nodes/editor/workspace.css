@@ -626,3 +626,28 @@ body.fc-ws-open #red-ui-notifications {
   padding: 1px 5px;
   font-size: 11px;
 }
+
+/* ── Settings → Fromcubes (provider-settings.js) ─────────────────
+   Lives in Node-RED's own Settings tray, not in the overlay, so it uses
+   Node-RED's theme variables instead of the vs-dark palette above. */
+.fc-ps .fc-ps-section { margin-bottom: 24px; }
+.fc-ps .fc-ps-hint { color: var(--red-ui-secondary-text-color); margin: 0 0 8px; }
+.fc-ps .fc-ps-note,
+.fc-ps .fc-ps-warn { margin: 0 0 8px; }
+.fc-ps .fc-ps-warn { color: var(--red-ui-text-color-error); }
+.fc-ps .fc-ps-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.fc-ps .fc-ps-row input[type="radio"] { margin: 3px 0 0; flex: none; width: auto; }
+.fc-ps .fc-ps-row label { width: auto; margin: 0; cursor: pointer; }
+.fc-ps .fc-ps-row input:disabled + label { cursor: default; opacity: 0.6; }
+.fc-ps .fc-ps-id { font-family: var(--red-ui-monospace-font); font-weight: bold; }
+.fc-ps .fc-ps-module {
+  margin-left: 8px;
+  padding: 0 5px;
+  border: 1px solid var(--red-ui-secondary-border-color);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--red-ui-secondary-text-color);
+}
+.fc-ps .fc-ps-label,
+.fc-ps .fc-ps-problem { display: block; font-size: 12px; color: var(--red-ui-secondary-text-color); }
+.fc-ps .fc-ps-problem { color: var(--red-ui-text-color-error); }
