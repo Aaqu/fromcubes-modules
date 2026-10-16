@@ -35,6 +35,13 @@ npm test      # every package, plus the cross-package tests in tests/
 
 Internals and the plugin API: [README-DEV.md](packages/fromcubes-react/README-DEV.md).
 
+## Support
+
+fromcubes is built and maintained by one person. If it saves you time,
+consider sponsoring its development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
+
 ## License
 
 Apache-2.0

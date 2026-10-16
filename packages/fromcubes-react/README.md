@@ -6,6 +6,7 @@
 [![Node-RED](https://img.shields.io/badge/Node--RED-%E2%89%A5%204.0-8f0000.svg)](https://nodered.org)
 [![license](https://img.shields.io/npm/l/%40aaqu%2Ffromcubes-react.svg)](./LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/KYzsfKkYxX)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 **📖 Documentation — step-by-step guide with screenshots:** [aaqu.github.io/fromcubes-modules](https://aaqu.github.io/fromcubes-modules/) — install → import → edit JSX → live dashboard, on one example.
 
@@ -398,6 +399,13 @@ behind a reverse proxy. Highlights:
   deployments **must** terminate auth at a reverse proxy that strips all six
   inbound identity headers before injecting verified ones, and Node-RED must
   not be reachable except through that proxy.
+
+## Support
+
+fromcubes is built and maintained by one person. If it saves you time,
+consider sponsoring its development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 ## License
 
