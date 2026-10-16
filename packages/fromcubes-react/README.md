@@ -19,7 +19,7 @@ For internals, plugin authoring, and the deploy pipeline see [README-DEV.md](./R
 
 **💬 Questions, feedback, showcase?** Join the [fromcubes Discord](https://discord.gg/KYzsfKkYxX).
 
-**❤️ Support the project:** [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu) [![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L4L01UOFRG)
+**❤️ Support the project:** [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 ## Prerequisites
 
