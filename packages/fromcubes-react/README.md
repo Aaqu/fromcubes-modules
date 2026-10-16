@@ -11,8 +11,6 @@
 
 [![Documentation walkthrough](https://aaqu.github.io/fromcubes-modules/img/docs-scroll.gif)](https://aaqu.github.io/fromcubes-modules/)
 
-> **⚠️ Alpha Module** — This project is in early development. Expect breaking changes. Test on a clean Node-RED instance.
-
 A Node-RED node that turns any `/fromcubes/<sub-path>` URL into a React page. Write JSX in the editor, deploy, open the URL — your component talks to the flow over WebSocket. No build step, no browser compiler. All portal pages are served under the hardcoded `/fromcubes/` prefix so every node cleanly coexists under one URL tree.
 
 For internals, plugin authoring, and the deploy pipeline see [README-DEV.md](./README-DEV.md).

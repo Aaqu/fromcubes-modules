@@ -7,8 +7,6 @@ page talks to your flow over WebSocket. No build step, no browser compiler.
 **💬 Discord:** [join](https://discord.gg/KYzsfKkYxX) ·
 **❤️ Sponsor:** [GitHub Sponsors](https://github.com/sponsors/Aaqu)
 
-> **⚠️ Alpha** — early development, expect breaking changes.
-
 ## Packages
 
 | Package | |
