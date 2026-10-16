@@ -1,4 +1,4 @@
-# @aaqu/fromcubes-portal-react — Developer guide
+# @aaqu/fromcubes-react — Developer guide
 
 This document covers the parts a contributor or plugin author actually touches:
 how the bundle is assembled at deploy, how the runtime keeps itself consistent
@@ -465,7 +465,8 @@ for tests/observability.
 
 Other Node-RED plugins (or your own scripts dropped into
 `~/.node-red/node_modules`) can register hooks against the type
-`fromcubes-portal-react`. Hooks add auth, audit, RBAC, message rewriting, etc.
+`fromcubes-hooks` (the old `fromcubes-portal-react` type still works, with a
+warning, until the next major version). Hooks add auth, audit, RBAC, message rewriting, etc.
 without forking this module.
 
 ```javascript
@@ -678,11 +679,15 @@ npm run test:watch      # iterate on lib/ changes
 npm run docs            # jsdoc → docs/api
 ```
 
-To run the plugin against a real Node-RED:
+The repository is an npm-workspaces monorepo: `packages/fromcubes-react` (this
+core) plus the add-ons `fromcubes-auth-headers`, `fromcubes-tailwind` and
+`fromcubes-assets`. Run `npm install` and `npm test` at the repository root.
+
+To run them against a real Node-RED, install all four from the checkout:
 
 ```bash
 cd ~/.node-red
-npm install /path/to/fromcubes-react
+npm install /path/to/fromcubes/packages/{fromcubes-react,fromcubes-auth-headers,fromcubes-tailwind,fromcubes-assets}
 npm start
 ```
 
@@ -691,8 +696,8 @@ What needs a restart vs just a deploy:
 | You changed | Action |
 |---|---|
 | JSX, library components, utilities, examples | **Deploy** — the runtime tears down the affected portals and rebuilds them |
-| `portal-react.html`, `tw-candidates.js`, editor assets | **Full browser refresh** of the editor (Node-RED caches editor assets hard; sometimes `Cmd/Ctrl-Shift-R`) |
-| `nodes/portal-react.js`, `nodes/lib/*.js` | **Restart Node-RED** — the runtime is loaded once at startup; in-place edits are not picked up by deploy |
+| `portal-react.html`, editor assets, an add-on's `.html` | **Full browser refresh** of the editor (Node-RED caches editor assets hard; sometimes `Cmd/Ctrl-Shift-R`) |
+| `nodes/portal-react.js`, `nodes/lib/*.js`, an add-on's `.js` | **Restart Node-RED** — the runtime is loaded once at startup; in-place edits are not picked up by deploy |
 
 A handy loop while debugging the runtime: keep `npm run test:watch` in one pane
 and Node-RED in another. Most regressions surface in the unit tests first because

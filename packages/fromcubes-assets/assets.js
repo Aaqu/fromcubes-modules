@@ -1,4 +1,4 @@
-/** @module nodes/addons/assets/assets */
+/** @module @aaqu/fromcubes-assets/assets */
 
 /**
  * Portal Assets — static file serving with security validation.

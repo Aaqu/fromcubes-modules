@@ -434,11 +434,3 @@ test("className completion loads from the engine-aware endpoint everywhere", () 
   expect(ws).toContain("window.__fcRefreshCssClasses()");
   expect(pane).toContain("window.__fcRefreshCssClasses()");
 });
-
-test("tailwind candidate list is non-trivial and unique", () => {
-  const { generateCandidates } = require("../nodes/addons/tailwind/candidates");
-  const list = generateCandidates();
-  expect(list.length).toBeGreaterThan(1000);
-  expect(new Set(list).size).toBe(list.length);
-  expect(list).toContain("p-4");
-});

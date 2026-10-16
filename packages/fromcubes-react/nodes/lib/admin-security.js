@@ -3,9 +3,9 @@
 /**
  * The gates every fromcubes admin route goes through — permission scopes,
  * the CSRF header check and the per-IP rate limit — plus the express that
- * Node-RED itself ships. Shared by the core and by the add-ons (through
- * lib/api.js), so an add-on's routes get exactly the same protection and
- * the same rate-limit buckets as the core's.
+ * Node-RED itself ships. Shared by the core and by the add-on packages
+ * (through the `api` export, lib/api.js), so an add-on's routes get exactly
+ * the same protection and the same rate-limit buckets as the core's.
  */
 
 /**

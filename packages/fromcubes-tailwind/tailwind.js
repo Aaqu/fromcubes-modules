@@ -4,11 +4,11 @@
  * (candidates.js).
  *
  * A Node-RED plugin, loaded by Node-RED itself (package.json → node-red →
- * plugins). The core finds it by type through RED.plugins; nothing in the
- * core requires this file.
+ * plugins). The core (@aaqu/fromcubes-react) finds it by type through
+ * RED.plugins; this package reaches the core only through its `api` export.
  */
 
-const { CSS_TYPE, API_VERSION } = require("../../lib/api");
+const { CSS_TYPE, API_VERSION } = require("@aaqu/fromcubes-react/api");
 const { generateCSS } = require("./css");
 const { generateCandidates } = require("./candidates");
 

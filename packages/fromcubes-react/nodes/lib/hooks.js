@@ -1,5 +1,5 @@
 /**
- * Plugin hook system for @aaqu/fromcubes-portal-react.
+ * Plugin hook system for @aaqu/fromcubes-react.
  *
  * Plugins register with Node-RED via:
  *   RED.plugins.registerPlugin("my-plugin", {

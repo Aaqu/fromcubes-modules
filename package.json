@@ -1,54 +1,15 @@
 {
-  "name": "@aaqu/fromcubes-portal-react",
-  "version": "0.1.0-alpha.37",
-  "description": "Fromcubes Portal - React for Node-RED with Tailwind CSS and auto complete",
-  "type": "commonjs",
-  "keywords": [
-    "node-red",
-    "dashboard",
-    "portal",
-    "jsx",
-    "react",
-    "tailwind",
-    "websocket",
-    "fromcubes"
+  "name": "fromcubes",
+  "private": true,
+  "description": "Fromcubes monorepo: @aaqu/fromcubes-react and its add-ons",
+  "workspaces": [
+    "packages/*"
   ],
-  "node-red": {
-    "version": ">=4.0.0",
-    "nodes": {
-      "portal-react": "nodes/portal-react.js"
-    },
-    "plugins": {
-      "fromcubes-auth-headers": "nodes/addons/auth-headers/auth-headers.js",
-      "fromcubes-tailwind": "nodes/addons/tailwind/tailwind.js",
-      "fromcubes-assets": "nodes/addons/assets/portal-assets.js"
-    }
-  },
-  "files": [
-    "nodes/",
-    "examples/",
-    "README.md",
-    "LICENSE",
-    "THIRD-PARTY-NOTICES.md"
-  ],
-  "engines": {
-    "node": ">=18.5"
-  },
-  "dependencies": {
-    "esbuild": "^0.28.2",
-    "monaco-editor": "^0.56.0",
-    "prettier": "^3.9.8",
-    "react": "^19.3.0",
-    "react-dom": "^19.3.0",
-    "tailwindcss": "^4.3.3"
-  },
-  "peerDependencies": {
-    "ws": "^8.21.0"
-  },
-  "peerDependenciesMeta": {
-    "ws": {
-      "optional": false
-    }
+  "scripts": {
+    "start": "node-red",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "docs": "npm run docs -w @aaqu/fromcubes-react"
   },
   "devDependencies": {
     "express": "^4.22.3",
@@ -63,30 +24,13 @@
   "overrides": {
     "dompurify": "3.4.15"
   },
-  "scripts": {
-    "start": "node-red",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "docs": "jsdoc -c jsdoc.json"
-  },
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Aaqu/fromcubes-react.git"
-  },
-  "bugs": {
-    "url": "https://github.com/Aaqu/fromcubes-react/issues"
-  },
-  "homepage": "https://aaqu.github.io/fromcubes-react/",
-  "funding": {
-    "type": "ko-fi",
-    "url": "https://ko-fi.com/L4L01UOFRG"
+    "url": "git+https://github.com/Aaqu/fromcubes.git"
   },
   "license": "Apache-2.0",
   "author": {
     "name": "Aaqu",
     "url": "https://github.com/Aaqu"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

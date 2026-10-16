@@ -1,30 +1,39 @@
 /**
- * The line between the core and its add-ons (nodes/addons/*).
+ * The line between the core (@aaqu/fromcubes-react) and the add-on packages.
  *
- * Each add-on must be movable into its own npm package by changing one
- * require (`../../lib/api` → the core package's `api` export). That holds
- * only while:
- *   - an add-on reaches the core through lib/api.js and nothing else;
- *   - an add-on never reaches into another add-on;
- *   - the core never requires an add-on (it finds them through RED.plugins);
- *   - every add-on is declared as a Node-RED plugin in package.json.
+ * An add-on is installed on its own, next to whatever core version the user
+ * has, so it may depend on the core only through the core's published `api`
+ * export — never a deep path, never a relative path into another package,
+ * never another add-on. The core never requires an add-on: it finds them
+ * through RED.plugins. And each package must publish every file it loads.
  */
 
 const fs = require("fs");
+const os = require("os");
 const path = require("path");
 const { builtinModules } = require("module");
 
 const ROOT = path.join(__dirname, "..");
-const NODES = path.join(ROOT, "nodes");
-const ADDONS = path.join(NODES, "addons");
-const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, "package.json"), "utf8"));
+const PACKAGES = path.join(ROOT, "packages");
+const CORE_DIR = path.join(PACKAGES, "fromcubes-react");
+const CORE = "@aaqu/fromcubes-react";
+const CORE_API = CORE + "/api";
 
-function jsFiles(dir) {
+const readPkg = (dir) => JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"));
+
+const addonDirs = fs
+  .readdirSync(PACKAGES, { withFileTypes: true })
+  .filter((e) => e.isDirectory() && e.name !== "fromcubes-react")
+  .map((e) => path.join(PACKAGES, e.name));
+
+// Shipped source files of a package (tests and node_modules excluded).
+function sourceFiles(dir, exts = [".js"]) {
   const out = [];
   for (const e of fs.readdirSync(dir, { withFileTypes: true })) {
+    if (e.name === "node_modules" || e.name === "tests" || e.name === "tools") continue;
     const p = path.join(dir, e.name);
-    if (e.isDirectory()) out.push(...jsFiles(p));
-    else if (e.name.endsWith(".js")) out.push(p);
+    if (e.isDirectory()) out.push(...sourceFiles(p, exts));
+    else if (exts.some((x) => e.name.endsWith(x))) out.push(p);
   }
   return out;
 }
@@ -38,94 +47,104 @@ function requires(file) {
   return [...src.matchAll(/require\(\s*["']([^"']+)["']\s*\)/g)].map((m) => m[1]);
 }
 
-const addonNames = fs
-  .readdirSync(ADDONS, { withFileTypes: true })
-  .filter((e) => e.isDirectory())
-  .map((e) => e.name);
+const pkgNameOf = (spec) => {
+  const bare = spec.startsWith("node:") ? spec.slice(5) : spec;
+  return bare.startsWith("@") ? bare.split("/").slice(0, 2).join("/") : bare.split("/")[0];
+};
 
-test("there are add-ons to check", () => {
-  expect(addonNames.sort()).toEqual(["assets", "auth-headers", "tailwind"]);
+test("the expected packages are there", () => {
+  expect(addonDirs.map((d) => path.basename(d)).sort()).toEqual([
+    "fromcubes-assets",
+    "fromcubes-auth-headers",
+    "fromcubes-tailwind",
+  ]);
+  for (const dir of [CORE_DIR, ...addonDirs]) {
+    expect(readPkg(dir).name).toBe("@aaqu/" + path.basename(dir));
+  }
 });
 
-describe.each(addonNames)("add-on %s", (name) => {
-  const dir = path.join(ADDONS, name);
+test("the core's api export resolves to the add-on surface", () => {
+  const core = readPkg(CORE_DIR);
+  expect(core.exports["./api"]).toBe("./nodes/lib/api.js");
+  const api = require(CORE_API);
+  for (const key of ["IDENTITY_TYPE", "CSS_TYPE", "API_VERSION", "createAdminSecurity", "loadExpress"]) {
+    expect(api[key], key).toBeDefined();
+  }
+});
 
-  test("reaches the core only through lib/api, never another add-on", () => {
-    for (const file of jsFiles(dir)) {
+describe.each(addonDirs.map((d) => [path.basename(d), d]))("add-on %s", (_name, dir) => {
+  const pkg = readPkg(dir);
+
+  test("requires only its own files, Node built-ins, its dependencies, or the core api", () => {
+    const deps = new Set(Object.keys(pkg.dependencies || {}));
+    for (const file of sourceFiles(dir)) {
       for (const spec of requires(file)) {
-        if (!spec.startsWith(".")) continue;
-        const target = path.resolve(path.dirname(file), spec);
-        const inside = target.startsWith(dir + path.sep);
-        const isApi = target === path.join(NODES, "lib", "api") ||
-          target === path.join(NODES, "lib", "api.js");
-        expect(
-          inside || isApi,
-          `${path.relative(ROOT, file)} requires ${spec}`,
-        ).toBe(true);
+        const where = `${path.relative(ROOT, file)} requires "${spec}"`;
+        if (spec.startsWith(".")) {
+          expect(path.resolve(path.dirname(file), spec).startsWith(dir + path.sep), where).toBe(true);
+        } else if (pkgNameOf(spec) === CORE) {
+          expect(spec, where).toBe(CORE_API);
+        } else {
+          const name = pkgNameOf(spec);
+          expect(builtinModules.includes(name) || deps.has(name), where).toBe(true);
+        }
       }
     }
   });
 
-  test("requires only Node built-ins or declared dependencies", () => {
-    const declared = new Set(Object.keys(pkg.dependencies || {}));
-    for (const file of jsFiles(dir)) {
-      for (const spec of requires(file)) {
-        if (spec.startsWith(".")) continue;
-        const bare = spec.startsWith("node:") ? spec.slice(5) : spec;
-        const pkgName = bare.startsWith("@") ? bare.split("/").slice(0, 2).join("/") : bare.split("/")[0];
-        expect(
-          builtinModules.includes(pkgName) || declared.has(pkgName),
-          `${path.relative(ROOT, file)} requires undeclared "${spec}"`,
-        ).toBe(true);
-      }
-    }
+  test("declares the core as a peer, not a dependency", () => {
+    expect(pkg.peerDependencies?.[CORE]).toBeTruthy();
+    expect(pkg.dependencies?.[CORE]).toBeUndefined();
   });
 
-  test("is declared as a Node-RED plugin whose entry file exists", () => {
-    const entries = Object.values(pkg["node-red"].plugins || {}).filter((f) =>
-      f.startsWith(`nodes/addons/${name}/`),
-    );
+  test("is a Node-RED plugin whose entry exists", () => {
+    const entries = Object.values(pkg["node-red"].plugins || {});
     expect(entries).toHaveLength(1);
-    expect(fs.existsSync(path.join(ROOT, entries[0]))).toBe(true);
+    expect(fs.existsSync(path.join(dir, entries[0]))).toBe(true);
+    expect(pkg["node-red"].nodes).toBeUndefined();
+  });
+
+  test("publishes every file it ships", () => {
+    const files = new Set(pkg.files);
+    for (const file of sourceFiles(dir, [".js", ".html"])) {
+      expect(files.has(path.relative(dir, file)), path.relative(ROOT, file)).toBe(true);
+    }
+    expect(files.has("README.md") && fs.existsSync(path.join(dir, "README.md"))).toBe(true);
+    expect(files.has("LICENSE") && fs.existsSync(path.join(dir, "LICENSE"))).toBe(true);
+  });
+
+  test("registers exactly one plugin with RED.plugins", () => {
+    const registered = [];
+    const RED = {
+      plugins: { registerPlugin: (id, def) => registered.push({ id, def }) },
+      settings: { userDir: fs.mkdtempSync(path.join(os.tmpdir(), "addon-")) },
+      // Assets mounts routes; give it inert routers.
+      httpAdmin: { use() {}, get() {}, post() {}, put() {}, delete() {} },
+      httpNode: { use() {}, get() {} },
+      log: { error() {}, warn() {}, info() {} },
+    };
+    require(path.join(dir, Object.values(pkg["node-red"].plugins)[0]))(RED);
+    expect(registered).toHaveLength(1);
+    if (RED.settings.portalReactRateBucketPruneIv) clearInterval(RED.settings.portalReactRateBucketPruneIv);
   });
 });
 
-test("the core never requires an add-on", () => {
-  const coreFiles = jsFiles(NODES).filter((f) => !f.startsWith(ADDONS + path.sep));
-  for (const file of coreFiles) {
+test("the core never requires an add-on or reaches outside its package", () => {
+  const addonNames = new Set(addonDirs.map((d) => readPkg(d).name));
+  for (const file of sourceFiles(path.join(CORE_DIR, "nodes"))) {
     for (const spec of requires(file)) {
-      if (!spec.startsWith(".")) continue;
-      const target = path.resolve(path.dirname(file), spec);
-      expect(
-        target.startsWith(ADDONS + path.sep),
-        `${path.relative(ROOT, file)} requires add-on ${spec}`,
-      ).toBe(false);
+      const where = `${path.relative(ROOT, file)} requires "${spec}"`;
+      if (spec.startsWith(".")) {
+        expect(path.resolve(path.dirname(file), spec).startsWith(CORE_DIR + path.sep), where).toBe(true);
+      } else {
+        expect(addonNames.has(pkgNameOf(spec)), where).toBe(false);
+      }
     }
   }
 });
 
 test("core editor HTML carries no add-on UI", () => {
-  const html = fs.readFileSync(path.join(NODES, "portal-react.html"), "utf8");
+  const html = fs.readFileSync(path.join(CORE_DIR, "nodes", "portal-react.html"), "utf8");
   expect(html).not.toContain("fromcubes-public");
   expect(html).not.toContain("fromcubes-react/assets");
-});
-
-test("each add-on plugin registers itself with RED.plugins", () => {
-  for (const rel of Object.values(pkg["node-red"].plugins)) {
-    const registered = [];
-    const RED = {
-      plugins: { registerPlugin: (id, def) => registered.push({ id, def }) },
-      settings: {},
-      // portal-assets mounts routes; give it inert routers.
-      httpAdmin: { use() {}, get() {}, post() {}, put() {}, delete() {} },
-      httpNode: { use() {}, get() {} },
-      log: { error() {}, warn() {}, info() {} },
-    };
-    if (rel.includes("/assets/")) {
-      RED.settings.userDir = fs.mkdtempSync(path.join(require("os").tmpdir(), "addon-"));
-    }
-    require(path.join(ROOT, rel))(RED);
-    expect(registered.length, rel).toBe(1);
-    if (RED.settings.portalReactRateBucketPruneIv) clearInterval(RED.settings.portalReactRateBucketPruneIv);
-  }
 });

@@ -1,0 +1,78 @@
+{
+  "name": "@aaqu/fromcubes-react",
+  "version": "0.1.0-alpha.37",
+  "description": "Fromcubes React - React portals for Node-RED, built at deploy, with live WebSocket data binding",
+  "type": "commonjs",
+  "keywords": [
+    "node-red",
+    "dashboard",
+    "portal",
+    "jsx",
+    "react",
+    "tailwind",
+    "websocket",
+    "fromcubes"
+  ],
+  "node-red": {
+    "version": ">=4.0.0",
+    "nodes": {
+      "portal-react": "nodes/portal-react.js"
+    }
+  },
+  "exports": {
+    "./api": "./nodes/lib/api.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "nodes/",
+    "examples/",
+    "README.md",
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
+  ],
+  "scripts": {
+    "docs": "jsdoc -c jsdoc.json"
+  },
+  "engines": {
+    "node": ">=18.5"
+  },
+  "dependencies": {
+    "esbuild": "^0.28.2",
+    "monaco-editor": "^0.56.0",
+    "prettier": "^3.9.8",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "@aaqu/fromcubes-assets": "^0.1.0-alpha.37",
+    "@aaqu/fromcubes-auth-headers": "^0.1.0-alpha.37",
+    "@aaqu/fromcubes-tailwind": "^0.1.0-alpha.37"
+  },
+  "peerDependencies": {
+    "ws": "^8.21.0"
+  },
+  "peerDependenciesMeta": {
+    "ws": {
+      "optional": false
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aaqu/fromcubes.git",
+    "directory": "packages/fromcubes-react"
+  },
+  "bugs": {
+    "url": "https://github.com/Aaqu/fromcubes/issues"
+  },
+  "homepage": "https://aaqu.github.io/fromcubes/",
+  "funding": {
+    "type": "ko-fi",
+    "url": "https://ko-fi.com/L4L01UOFRG"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Aaqu",
+    "url": "https://github.com/Aaqu"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

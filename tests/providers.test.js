@@ -1,8 +1,9 @@
 /**
  * Provider registry (lib/providers.js): identity providers and CSS engines.
  *
- * The core builds in only `none`; `headers` and `tailwind` are add-on plugins
- * found through RED.plugins like any third-party one. By default the fake
+ * The core builds in only `none`; `headers` and `tailwind` are add-on packages
+ * (@aaqu/fromcubes-auth-headers, @aaqu/fromcubes-tailwind) found through
+ * RED.plugins like any third-party one. By default the fake
  * RED below has both add-ons installed, as the package ships them, so these
  * tests pin down the plugin contract AND that nothing changes for existing
  * flows. `addons: false` is a core installed without them.
@@ -16,15 +17,16 @@ const {
   API_VERSION,
   MAX_USER_STRING,
   MAX_GROUPS,
-} = require("../nodes/lib/providers");
-const { extractPortalUser } = require("../nodes/addons/auth-headers/headers");
+} = require("../packages/fromcubes-react/nodes/lib/providers");
+const { extractPortalUser } = require("../packages/fromcubes-auth-headers/headers");
 
 // The add-ons as Node-RED registers them: registerPlugin(id, def) adds id
 // and module to the definition.
-const PKG = "@aaqu/fromcubes-portal-react";
+const HEADERS_PKG = "@aaqu/fromcubes-auth-headers";
+const TAILWIND_PKG = "@aaqu/fromcubes-tailwind";
 const ADDONS = [
-  { ...require("../nodes/addons/auth-headers/auth-headers").provider, id: "headers", module: PKG },
-  { ...require("../nodes/addons/tailwind/tailwind").provider, id: "tailwind", module: PKG },
+  { ...require("../packages/fromcubes-auth-headers/auth-headers").provider, id: "headers", module: HEADERS_PKG },
+  { ...require("../packages/fromcubes-tailwind/tailwind").provider, id: "tailwind", module: TAILWIND_PKG },
 ];
 
 function fakeRED({ plugins = [], settings = {}, addons = true } = {}) {
@@ -199,7 +201,7 @@ describe("selection", () => {
     const { p, RED } = make({ plugins: [second] });
     expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
     expect(RED._logs.error[0]).toMatch(
-      /"headers" is registered by more than one package \(@aaqu\/fromcubes-portal-react, evil-pkg\)/,
+      /"headers" is registered by more than one package \(@aaqu\/fromcubes-auth-headers, evil-pkg\)/,
     );
     expect(() => p.select("identity", "headers")).toThrow(/more than one package/);
   });
@@ -410,7 +412,7 @@ describe("css engine failure rejects", () => {
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const { ProviderSelectError } = require("../nodes/lib/providers");
+const { ProviderSelectError } = require("../packages/fromcubes-react/nodes/lib/providers");
 
 describe("choice made in the editor", () => {
   let dir;
@@ -537,7 +539,7 @@ describe("describe()", () => {
     expect(d.identity).toMatchObject({ selected: "headers", source: "default", locked: false, missing: false });
     expect(d.identity.options.map((o) => o.id)).toEqual(["none", "headers", "sso", "old", "has space"]);
     expect(d.identity.options[0]).toMatchObject({ module: "built-in", builtin: true });
-    expect(d.identity.options[1]).toMatchObject({ module: PKG, builtin: false });
+    expect(d.identity.options[1]).toMatchObject({ module: HEADERS_PKG, builtin: false });
     expect(d.identity.options[1].problem).toMatch(/more than one package/);
     expect(d.identity.options[2]).toEqual({ id: "sso", label: "Company SSO", module: "sso-pkg", builtin: false });
     expect(d.identity.options[3].problem).toMatch(/apiVersion 2/);
@@ -549,7 +551,7 @@ describe("describe()", () => {
     expect(d.css.options[1]).toEqual({
       id: "tailwind",
       label: "Tailwind CSS 4 utility classes",
-      module: PKG,
+      module: TAILWIND_PKG,
       builtin: false,
     });
   });
@@ -628,7 +630,7 @@ describe("editorClasses()", () => {
   });
 
   it("caps the list length", async () => {
-    const { MAX_EDITOR_CLASSES } = require("../nodes/lib/providers");
+    const { MAX_EDITOR_CLASSES } = require("../packages/fromcubes-react/nodes/lib/providers");
     const many = Array.from({ length: MAX_EDITOR_CLASSES + 10 }, (_, i) => "c" + i);
     const uno = cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => many } });
     const { p } = makeTw({ plugins: [uno], settings: { cssEngine: "uno" } });

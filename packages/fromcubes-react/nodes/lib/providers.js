@@ -1,7 +1,7 @@
 /** @module nodes/lib/providers */
 
 /**
- * Pluggable providers for @aaqu/fromcubes-portal-react.
+ * Pluggable providers for @aaqu/fromcubes-react.
  *
  * Two extension points, each a Node-RED plugin type:
  *
@@ -19,8 +19,8 @@
  *   })
  *
  * The core builds in only `none` for each kind. Everything that does real
- * work — `headers` (nodes/addons/auth-headers) and `tailwind`
- * (nodes/addons/tailwind) — is a Node-RED plugin like any third-party one,
+ * work — `headers` (@aaqu/fromcubes-auth-headers) and
+ * `tailwind` (@aaqu/fromcubes-tailwind) — is a Node-RED plugin like any third-party one,
  * found through RED.plugins and held to the same apiVersion and validation.
  * Two plugins registering the same provider id of one type are ambiguous and
  * neither is used.

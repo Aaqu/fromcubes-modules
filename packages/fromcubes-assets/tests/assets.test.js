@@ -15,7 +15,7 @@ const {
   scanDir,
   getAssetsStats,
   registerAssets,
-} = require("../nodes/addons/assets/assets");
+} = require("../assets");
 
 // ── Helpers ───────────────────────────────────────────────────
 

@@ -3,11 +3,11 @@
  * headers injected by a reverse proxy (see headers.js for the contract).
  *
  * A Node-RED plugin, loaded by Node-RED itself (package.json → node-red →
- * plugins). The core finds it by type through RED.plugins; nothing in the
- * core requires this file.
+ * plugins). The core (@aaqu/fromcubes-react) finds it by type through
+ * RED.plugins; this package reaches the core only through its `api` export.
  */
 
-const { IDENTITY_TYPE, API_VERSION } = require("../../lib/api");
+const { IDENTITY_TYPE, API_VERSION } = require("@aaqu/fromcubes-react/api");
 const { extractPortalUser } = require("./headers");
 
 const provider = {

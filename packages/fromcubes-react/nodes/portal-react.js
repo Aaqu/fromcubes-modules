@@ -1,4 +1,4 @@
-/** @module @aaqu/fromcubes-portal-react */
+/** @module @aaqu/fromcubes-react */
 
 /**
  * Node-RED node that serves React apps from configurable HTTP endpoints

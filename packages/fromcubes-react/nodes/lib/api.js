@@ -1,10 +1,10 @@
 /** @module nodes/lib/api */
 
 /**
- * The core's public surface for add-ons. Everything under `nodes/addons/`
- * reaches the core through this file and nothing else (a test enforces it),
- * so moving an add-on into its own package means changing one require:
- * `../../lib/api` → `@aaqu/fromcubes-portal-react/api`.
+ * The core's public surface for add-ons. Add-on packages
+ * (@aaqu/fromcubes-auth-headers, -tailwind, -assets, and third-party ones)
+ * require `@aaqu/fromcubes-react/api` — package.json `exports` maps it here —
+ * and nothing else from the core (tests/addon-boundary.test.js).
  *
  * Keep it small and stable — anything exported here is a promise to every
  * add-on, ours and third-party.
