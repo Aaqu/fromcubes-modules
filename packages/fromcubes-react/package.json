@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-react",
-  "version": "0.1.0-alpha.37",
+  "version": "0.1.0",
   "description": "Fromcubes React - React portals for Node-RED, built at deploy, with live WebSocket data binding",
   "type": "commonjs",
   "keywords": [
@@ -42,9 +42,9 @@
     "prettier": "^3.9.8",
     "react": "^19.3.0",
     "react-dom": "^19.3.0",
-    "@aaqu/fromcubes-assets": "^0.1.0-alpha.37",
-    "@aaqu/fromcubes-auth-headers": "^0.1.0-alpha.37",
-    "@aaqu/fromcubes-tailwind": "^0.1.0-alpha.37"
+    "@aaqu/fromcubes-assets": "^0.1.0",
+    "@aaqu/fromcubes-auth-headers": "^0.1.0",
+    "@aaqu/fromcubes-tailwind": "^0.1.0"
   },
   "peerDependencies": {
     "ws": "^8.21.0"

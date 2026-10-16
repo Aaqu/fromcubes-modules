@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-tailwind",
-  "version": "0.1.0-alpha.37",
+  "version": "0.1.0",
   "description": "Fromcubes CSS engine: Tailwind CSS 4 generated server-side, with editor class completion",
   "type": "commonjs",
   "keywords": [
@@ -29,7 +29,7 @@
     "tailwindcss": "^4.3.3"
   },
   "peerDependencies": {
-    "@aaqu/fromcubes-react": "^0.1.0-alpha.37"
+    "@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"
   },
   "repository": {
     "type": "git",

@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-auth-headers",
-  "version": "0.1.0-alpha.37",
+  "version": "0.1.0",
   "description": "Fromcubes identity provider: users from x-portal-user-* headers set by a reverse proxy",
   "type": "commonjs",
   "keywords": [
@@ -26,7 +26,7 @@
     "node": ">=18.5"
   },
   "peerDependencies": {
-    "@aaqu/fromcubes-react": "^0.1.0-alpha.37"
+    "@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"
   },
   "repository": {
     "type": "git",

@@ -37,7 +37,7 @@ For internals, plugin authoring, and the deploy pipeline see [README-DEV.md](./R
 
 ```bash
 cd ~/.node-red
-npm install @aaqu/fromcubes-react@alpha
+npm install @aaqu/fromcubes-react
 # restart Node-RED
 ```
 

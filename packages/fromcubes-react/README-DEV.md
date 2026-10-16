@@ -34,6 +34,7 @@ GitHub. ASCII fallbacks are kept where they read better in a plain terminal.
 - [Portal Assets API](#portal-assets-api)
 - [Security model](#security-model)
 - [Repository layout](#repository-layout)
+- [Versioning and releases](#versioning-and-releases)
 - [Iterating locally](#iterating-locally)
 - [Contributing](#contributing)
 
@@ -569,6 +570,10 @@ esbuild and Tailwind entirely.
 
 CSS is generated server-side, never in the browser:
 
+This is the `tailwind` CSS engine, shipped as `@aaqu/fromcubes-tailwind`
+(`css.js`); the core only stores, caches and serves what the engine in force
+returns.
+
 1. `getTwCompiled()` lazily compiles the Tailwind base stylesheet once per
    process (memoised), resolving `@import 'tailwindcss'` via `require.resolve`.
 2. `generateCSS(source)` scans the full JSX for class candidates
@@ -589,7 +594,7 @@ on the next successful build.
 
 ## Portal Assets API
 
-`lib/assets.js` mounts a file manager for static assets (3D models, textures,
+`@aaqu/fromcubes-assets` (`assets.js`) mounts a file manager for static assets (3D models, textures,
 fonts…). Admin routes are auth-gated + CSRF + rate-limited; public serving is
 read-only.
 
@@ -645,30 +650,53 @@ reverse proxy.
 
 ## Repository layout
 
+The repository (`fromcubes`) is an npm-workspaces monorepo:
+
 ```
-nodes/
-  portal-react.js       Node-RED-bound runtime — registers portal-react,
-                        fc-portal-component, fc-portal-utility node types;
-                        manages WS lifecycle, builds bundles, runs the rebuild
-                        scheduler, mounts admin REST + CSS + assets routes.
-  portal-react.html     Editor UI for all three node types: Monaco (served from
-                        node_modules at /fromcubes-react/vs), Tailwind + JSX +
-                        utility-symbol autocompletion, Components and Utilities
-                        dialogs, Portal Assets sidebar.
-  tw-candidates.js      Generates the ~19k Tailwind class-name list for editor
-                        autocompletion (cached, served at /fromcubes-react/tw-classes).
-  lib/
-    helpers.js          hash, transpile, generateCSS, validators, missing-ref
-                        detection, serveableHash/hasFreshBuild, disk cache.
-    hooks.js            Plugin hook dispatcher (allow + transform).
-    router.js           Pure routing (unicast / user-cast / broadcast).
-    page-builder.js     Browser HTML + window.__NR WS bridge + error/building
-                        overlays.
-    assets.js           Portal Assets file manager (validators + routes).
-tests/
-  helpers.test.js, hooks.test.js, routing.test.js, assets.test.js
-examples/               Importable Node-RED flows.
+packages/
+  fromcubes-react/          @aaqu/fromcubes-react — this core
+    nodes/
+      portal-react.js       Node-RED-bound runtime: registers portal-react,
+                            fc-portal-component, fc-portal-utility; WS lifecycle,
+                            bundling, rebuild scheduler, admin + CSS routes.
+      portal-react.html     Editor UI for the three node types: Monaco (served from
+                            node_modules at /fromcubes-react/vs), CSS-class + JSX +
+                            utility-symbol completion, Components/Utilities dialogs.
+      editor/               React Editor overlay, Settings → Fromcubes pane, Prettier.
+      lib/
+        api.js              The add-on surface, published as @aaqu/fromcubes-react/api.
+        providers.js        Identity provider + CSS engine registry.
+        admin-security.js   Permission / CSRF / rate-limit gates (shared with add-ons).
+        helpers.js          hash, transpile, validators, scanners, disk cache.
+        hooks.js            Plugin hook dispatcher (allow + transform).
+        router.js           Pure routing (unicast / user-cast / auth-cast / broadcast).
+        page-builder.js     Browser HTML + window.__NR WS bridge + overlays.
+    tests/  examples/  tools/
+  fromcubes-auth-headers/   identity provider "headers" (x-portal-user-*)
+  fromcubes-tailwind/       CSS engine "tailwind" + editor class list
+  fromcubes-assets/         Portal Assets: routes + sidebar tab
+tests/                      cross-package tests (registry with the real add-ons,
+                            header trust model, package boundaries)
 ```
+
+## Versioning and releases
+
+Each package is versioned **independently** (semver) and released on its own:
+the publish workflow ships every package whose `version` differs from its
+latest `<name>@<version>` tag, add-ons before the core.
+
+- **The core's `api` export is the contract.** Add-ons declare
+  `"@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"` as a peer dependency — any core
+  release below 1.0 is acceptable to them. So below 1.0 a core release may
+  only *add* to `api` (and to the plugin contract, guarded at runtime by
+  `apiVersion`); anything that breaks an add-on means a new `apiVersion` and
+  a major core version, and every add-on's peer range moves with it.
+- **The core depends on the add-ons with `^x.y.z`** (transitional, so that
+  installing the core brings them). When an add-on releases a new minor
+  (`0.2.0`), raise the range in the core to ship it to core installs.
+- Bump only the packages that changed. A change to `api` alone is a core
+  release; an add-on that starts using something new from `api` raises the
+  lower bound of its peer range.
 
 ## Iterating locally
 
