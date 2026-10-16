@@ -153,6 +153,18 @@ function getAssetsStats(assetsDir) {
 
 // ── Route registration ────────────────────────────────────────
 
+// Statuses express.static / send produce for a client's own mistake, with the
+// only text the public route ever sends back. Anything else is a 500.
+const PUBLIC_ERROR_TEXT = {
+  400: "Bad request",
+  403: "Forbidden",
+  404: "Not found",
+  405: "Method not allowed",
+  412: "Precondition failed",
+  416: "Range not satisfiable",
+  500: "Internal error",
+};
+
 /**
  * Resolve a `RED.auth.needsPermission(scope)` middleware, with a no-op fallback
  * for runtimes (older Node-RED versions / test harnesses) where `RED.auth` is
@@ -222,6 +234,16 @@ function registerAssets(RED, express, assetsDir, opts) {
     // have been written into assetsDir by mistake. fallthrough: false makes
     // express.static return 404 directly instead of leaking to the next mw.
     express.static(assetsDir, { maxAge: "1d", dotfiles: "deny", fallthrough: false }),
+    // fallthrough: false hands every miss to the error chain as an err that
+    // carries the absolute path (ENOENT … stat '<userDir>/fromcubes/public/…').
+    // Express's default handler prints err.stack outside production, so on
+    // this public, unauthenticated route any 404 would reveal where userDir
+    // lives. Answer with the bare status instead; log only real failures.
+    (err, req, res, _next) => {
+      const status = PUBLIC_ERROR_TEXT[err.status || err.statusCode] ? err.status || err.statusCode : 500;
+      if (status === 500) RED.log.error("portal-react public asset: " + err.message);
+      res.status(status).type("text/plain").send(PUBLIC_ERROR_TEXT[status]);
+    },
   );
 
   // List assets

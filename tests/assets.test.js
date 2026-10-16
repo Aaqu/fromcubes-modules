@@ -379,4 +379,48 @@ describe("HTTP endpoints", () => {
       expect(res.headers["content-disposition"]).toBe("attachment");
     });
   });
+
+  // Public and unauthenticated: an error must never tell the client where
+  // the files live on disk (express's default handler prints err.stack,
+  // ENOENT path included, outside production).
+  describe("errors on /fromcubes/public reveal nothing", () => {
+    const leaks = (res) =>
+      res.text.includes(tmpDir) || /ENOENT|EACCES|stat|at \w+ \(/.test(res.text);
+
+    it("missing file → plain 404", async () => {
+      const res = await request(app).get("/fromcubes/public/nope/missing.txt");
+      expect(res.status).toBe(404);
+      expect(res.text).toBe("Not found");
+      expect(res.headers["content-type"]).toMatch(/text\/plain/);
+      expect(leaks(res)).toBe(false);
+    });
+
+    it("dotfile → plain 403, contents not served", async () => {
+      fs.writeFileSync(path.join(tmpDir, ".env"), "SECRET=1");
+      const res = await request(app).get("/fromcubes/public/.env");
+      expect(res.status).toBe(403);
+      expect(res.text).toBe("Forbidden");
+      expect(res.text).not.toContain("SECRET");
+      expect(leaks(res)).toBe(false);
+    });
+
+    it("malformed URL → plain 400", async () => {
+      const res = await request(app).get("/fromcubes/public/%E0%A4%A");
+      expect(res.status).toBe(400);
+      expect(leaks(res)).toBe(false);
+    });
+
+    it("directory without trailing slash → 404, not a redirect exposing nothing either", async () => {
+      fs.mkdirSync(path.join(tmpDir, "models"));
+      const res = await request(app).get("/fromcubes/public/models");
+      expect([301, 404]).toContain(res.status);
+      expect(leaks(res)).toBe(false);
+    });
+
+    it("keeps the security headers on error responses", async () => {
+      const res = await request(app).get("/fromcubes/public/missing.png");
+      expect(res.headers["x-content-type-options"]).toBe("nosniff");
+      expect(res.headers["content-security-policy"]).toBe("default-src 'none'");
+    });
+  });
 });
