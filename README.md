@@ -231,6 +231,51 @@ If **Portal Auth** is off (or no proxy headers arrive), everything still works:
 
 Same model as dashboard 2 — no auth required to use the node.
 
+## Plugins: identity providers and CSS engines
+
+Who the user is and how CSS is generated are both pluggable. The defaults are
+built-in providers that use the same API: `headers` (the contract above) and
+`tailwind`. A separate npm package can register its own, e.g. for a different
+auth proxy or a different CSS tool:
+
+```js
+// package.json: "node-red": { "plugins": { "my-providers": "plugin.js" } }
+module.exports = function (RED) {
+  RED.plugins.registerPlugin("my-sso", {
+    type: "fromcubes-portal-identity",
+    apiVersion: 1,
+    async resolveUser(req) {          // HTTP request or WS upgrade request
+      const claims = await verify(req.headers.authorization);
+      return claims ? { userId: claims.sub, login: claims.preferred_username, groups: claims.groups } : null;
+    },
+  });
+  RED.plugins.registerPlugin("my-css", {
+    type: "fromcubes-portal-css",
+    apiVersion: 1,
+    async generate(source) {          // the portal's full source, components included
+      return { css: await compileMyCss(source) };
+    },
+  });
+};
+```
+
+Installing a plugin does not activate it — choose it in `settings.js`:
+
+```js
+portalReact: {
+  identityProvider: "my-sso",   // default "headers"
+  cssEngine: "my-css",          // default "tailwind"; "none" serves no stylesheet
+},
+```
+
+- `resolveUser` returns a user or `null`. Only the known fields
+  (`userId`, `login`, `displayName`, `email`, `role`, `groups`) are kept; a
+  throw, a rejection or 5 s without an answer means anonymous.
+- `generate` returns `{ css }`. A failure shows the yellow `css-fail` status
+  and the page is served unstyled.
+- An unknown provider name is logged once; for identity every session is then
+  anonymous.
+
 ## Portal Assets
 
 Static files (3D models, textures, fonts, etc.) can be uploaded and served from a public endpoint.

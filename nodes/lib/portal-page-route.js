@@ -24,7 +24,7 @@ function withNoStore(res) {
  * @param {string} opts.nodeRoot
  * @param {Function} opts.buildPage
  * @param {Function} opts.buildErrorPage
- * @param {Function} opts.extractPortalUser
+ * @param {function(Object): Promise<Object|null>} opts.resolveUser  Identity provider (lib/providers).
  * @returns {Function}
  */
 function createPortalPageHandler(opts) {
@@ -36,7 +36,7 @@ function createPortalPageHandler(opts) {
     nodeRoot,
     buildPage,
     buildErrorPage,
-    extractPortalUser,
+    resolveUser,
   } = opts;
 
   return async function portalPageHandler(req, res) {
@@ -54,9 +54,7 @@ function createPortalPageHandler(opts) {
       withNoStore(res);
       if (state.compiled.error) {
         if (state.lastGood) {
-          const user = state.portalAuth
-            ? extractPortalUser(req.headers)
-            : null;
+          const user = state.portalAuth ? await resolveUser(req) : null;
           res
             .type("text/html")
             .send(
@@ -99,7 +97,7 @@ function createPortalPageHandler(opts) {
       // Clear the losing timer — without this every request leaves a 15 s
       // timer pending after the CSS promise wins the race.
       clearTimeout(cssTimer);
-      const user = state.portalAuth ? extractPortalUser(req.headers) : null;
+      const user = state.portalAuth ? await resolveUser(req) : null;
       res
         .type("text/html")
         .send(

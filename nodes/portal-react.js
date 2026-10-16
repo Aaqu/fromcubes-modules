@@ -23,7 +23,7 @@
  * @property {string}  componentCode     User JSX entrypoint (must declare `function App`).
  * @property {string}  [pageTitle]       `<title>` for the served HTML page.
  * @property {string}  [customHead]      Raw HTML injected into `<head>` (trusted-author content).
- * @property {boolean} [portalAuth]      Read `x-portal-user-*` headers from incoming HTTP requests.
+ * @property {boolean} [portalAuth]      Resolve the user via the identity provider (default: `x-portal-user-*` headers).
  * @property {boolean} [authOnly]        Deliver `_client`-less msgs only to authenticated sessions (auth-cast default).
  * @property {boolean} [showWsStatus]    Render the in-page `#__cs` connection badge.
  * @property {Array<LibSpec>} [libs]    npm packages auto-installed at deploy via `dynamicModuleList`.
@@ -91,13 +91,14 @@
  * @property {?string} errorSource       Component / utility name responsible for the build error.
  * @property {?string} errorKind         'component' | 'utility' | 'missing-component' | 'missing-return' | 'transpile' | 'rebuild'
  * @property {?Object} lastGood          Snapshot of the previous successful build (degraded-mode fallback).
- * @property {boolean} [cssError]        Tailwind generation failed on the last attempt.
+ * @property {boolean} [cssError]        CSS generation failed on the last attempt.
  * @property {boolean} [building]
  * @property {?string} [runtimeError]    Browser-reported exception (truncated).
  */
 
 const crypto = require("crypto");
 const packageInfo = require("../package.json");
+const { DEFAULT_CSS } = require("./lib/providers");
 
 const CACHE_SCHEMA_VERSION = "portal-react-cache-v2";
 
@@ -502,8 +503,6 @@ module.exports = function (RED) {
     hash,
     transpile,
     quickCheckSyntax,
-    generateCSS,
-    extractPortalUser,
     serveableHash,
     hasFreshBuild,
     removeRoute,
@@ -521,6 +520,7 @@ module.exports = function (RED) {
     deleteCacheFiles,
     isHashInUse,
   } = helpers;
+  const providers = require("./lib/providers").createProviders(RED, helpers);
   const { buildPage, buildErrorPage } = require("./lib/page-builder");
   const { createPortalPageHandler } = require("./lib/portal-page-route");
   const {
@@ -738,7 +738,7 @@ module.exports = function (RED) {
      *   4. Pre-flight: syntax errors in components / utilities, missing
      *      `return` in `function App`
      *   5. Read disk cache; on miss run `transpile()` (esbuild buildSync)
-     *   6. Generate Tailwind CSS (cssReady promise)
+     *   6. Generate CSS via the CSS engine (cssReady promise)
      *   7. Snapshot lastGood for degraded-mode serving
      *   8. Broadcast `version` / `error` / `building` frames to live WS
      *
@@ -1003,8 +1003,17 @@ module.exports = function (RED) {
           "createRoot(document.getElementById('root')).render(React.createElement(App));",
         ].join("\n");
 
+        // The CSS engine joins the key only when it is not the default, so
+        // existing tailwind caches stay valid while another engine can never
+        // be served tailwind's stylesheet from the disk cache (or vice versa).
+        const cssEngine = providers.cssEngineId();
         const jsxHash = hash(
-          [CACHE_SCHEMA_VERSION, packageInfo.version, fullJsx].join("\0"),
+          [
+            CACHE_SCHEMA_VERSION,
+            packageInfo.version,
+            ...(cssEngine === DEFAULT_CSS ? [] : ["css:" + cssEngine]),
+            fullJsx,
+          ].join("\0"),
         );
 
         // ── Check: any used component or utility has its own syntax error ──
@@ -1147,21 +1156,23 @@ module.exports = function (RED) {
                   cssHash: prevState.cssHash,
                 });
               }
-              // cssHash is always jsxHash — generateCSS hashes raw fullJsx
-              // (no schema-version prefix), which would give the same CSS a
-              // different URL on cache-hit vs cache-miss builds and force a
-              // pointless browser refetch after redeploy.
-              return generateCSS(fullJsx).then(({ css }) => {
+              // cssHash is always jsxHash — so the same CSS keeps the same
+              // URL on cache-hit and cache-miss builds, with no pointless
+              // browser refetch after redeploy.
+              return providers.generateCss(fullJsx).then(({ css }) => {
                 writeCachedCSS(jsxHash, css);
                 return { css, cssHash: jsxHash };
               });
-            })().catch((err) => {
-              // CSS generation failed (Tailwind compile error, missing
-              // entrypoint, etc.). Surface as warn + flag pageState so
-              // updateStatus() shows a yellow ring "css-fail" — the portal
-              // page still loads (empty CSS), just unstyled. Cleared on
-              // the next successful build.
-              node.warn("Tailwind CSS generation failed: " + err.message);
+            })()
+              // An engine that emits nothing (`none`) gets no <link> at all —
+              // a hash pointing at empty CSS would only 404.
+              .then((r) => (r.css ? r : { css: "", cssHash: "" }))
+              .catch((err) => {
+              // CSS generation failed (engine error, unknown engine, etc.).
+              // Surface as warn + flag pageState so updateStatus() shows a
+              // yellow ring "css-fail" — the portal page still loads (empty
+              // CSS), just unstyled. Cleared on the next successful build.
+              node.warn(`CSS generation failed (${cssEngine}): ${err.message}`);
               const st = pageState[endpoint];
               if (st) st.cssError = true;
               updateStatus();
@@ -1248,7 +1259,7 @@ module.exports = function (RED) {
             }
           })
           .catch((e) => {
-            // Tail-handler — generateCSS already has its own .catch upstream
+            // Tail-handler — CSS generation already has its own .catch upstream
             // that yields { css: "", cssHash: "" }. This guards against
             // exceptions thrown inside the state-update block above so the
             // process doesn't see an UnhandledPromiseRejection.
@@ -1304,6 +1315,8 @@ module.exports = function (RED) {
         customHead,
         String(portalAuth),
         String(showWsStatus),
+        providers.identityId(),
+        providers.cssEngineId(),
       ].join("\0"),
     );
     const prevSig = portalSig[nodeId];
@@ -1334,7 +1347,7 @@ module.exports = function (RED) {
             nodeRoot,
             buildPage,
             buildErrorPage,
-            extractPortalUser,
+            resolveUser: providers.resolveUser,
           }),
         );
         registeredRoutes[endpoint] = true;
@@ -1372,8 +1385,21 @@ module.exports = function (RED) {
               try { socket.destroy(); } catch (e) { RED.log.trace("[portal-react] socket destroy: " + e.message); }
               return;
             }
-            wsServer.handleUpgrade(request, socket, head, (ws) => {
-              wsServer.emit("connection", ws, request);
+            // Identity is settled BEFORE the upgrade completes: a provider
+            // may be async (token verification), and a socket that is open
+            // before its user is known could receive auth-cast traffic as
+            // anonymous, or the reverse.
+            const userReady = portalAuth
+              ? providers.resolveUser(request)
+              : Promise.resolve(null);
+            userReady.then((user) => {
+              if (isClosing) {
+                try { socket.destroy(); } catch (e) { RED.log.trace("[portal-react] socket destroy: " + e.message); }
+                return;
+              }
+              wsServer.handleUpgrade(request, socket, head, (ws) => {
+                wsServer.emit("connection", ws, request, user);
+              });
             });
           }
         };
@@ -1381,7 +1407,7 @@ module.exports = function (RED) {
         RED.server.on("upgrade", onUpgrade);
         upgradeHandlers[nodeId] = onUpgrade;
 
-        wsServer.on("connection", (ws, request) => {
+        wsServer.on("connection", (ws, _request, user) => {
           if (isClosing) {
             ws.close();
             return;
@@ -1389,7 +1415,7 @@ module.exports = function (RED) {
           const portalClient = crypto.randomUUID();
           ws._portalClient = portalClient;
           if (portalAuth) {
-            ws._portalUser = extractPortalUser(request.headers);
+            ws._portalUser = user || null;
           }
           clients.set(portalClient, ws);
 
@@ -1473,9 +1499,11 @@ module.exports = function (RED) {
                 // inbound frame.
                 const client = { portalClient: ws._portalClient };
                 if (portalAuth && ws._portalUser) {
-                  // Source is extractPortalUser() — whitelist of named
-                  // header reads. No untrusted key can land here, so this
-                  // Object.assign cannot be turned into prototype pollution.
+                  // Source is providers.sanitizeUser() — it copies only the
+                  // named PortalUser fields out of whatever the identity
+                  // provider returned. No untrusted key can land here, so
+                  // this Object.assign cannot be turned into prototype
+                  // pollution.
                   Object.assign(client, ws._portalUser);
                 }
                 out._client = client;
