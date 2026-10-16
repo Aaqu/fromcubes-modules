@@ -247,7 +247,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   );
 
   // List assets
-  RED.httpAdmin.get("/portal-react/assets", READ, (_req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/assets", READ, (_req, res) => {
     try {
       res.json(scanDir(assetsDir, ""));
     } catch (e) {
@@ -257,7 +257,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   });
 
   // Create directory
-  RED.httpAdmin.post("/portal-react/assets/mkdir", WRITE, csrfGuard, rateLimit, jsonBody, (req, res) => {
+  RED.httpAdmin.post("/fromcubes-react/assets/mkdir", WRITE, csrfGuard, rateLimit, jsonBody, (req, res) => {
     const target = safePath(req.body && req.body.path, assetsDir);
     if (!target) return res.status(400).json({ error: "invalid path" });
     try {
@@ -270,7 +270,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   });
 
   // Move / rename
-  RED.httpAdmin.post("/portal-react/assets/move", WRITE, csrfGuard, rateLimit, jsonBody, (req, res) => {
+  RED.httpAdmin.post("/fromcubes-react/assets/move", WRITE, csrfGuard, rateLimit, jsonBody, (req, res) => {
     const from = safePath(req.body && req.body.from, assetsDir);
     const to = safePath(req.body && req.body.to, assetsDir);
     if (!from || !to) return res.status(400).json({ error: "invalid path" });
@@ -289,7 +289,7 @@ function registerAssets(RED, express, assetsDir, opts) {
 
   // Upload — 100mb cap is intentionally higher than json/text endpoints.
   RED.httpAdmin.post(
-    "/portal-react/assets/upload/*",
+    "/fromcubes-react/assets/upload/*",
     WRITE,
     csrfGuard,
     rateLimit,
@@ -321,7 +321,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   );
 
   // Delete
-  RED.httpAdmin.delete("/portal-react/assets/*", WRITE, csrfGuard, rateLimit, (req, res) => {
+  RED.httpAdmin.delete("/fromcubes-react/assets/*", WRITE, csrfGuard, rateLimit, (req, res) => {
     const rel = req.params[0];
     const target = safePath(rel, assetsDir);
     if (!target) return res.status(400).json({ error: "invalid path" });
@@ -335,7 +335,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   });
 
   // Download
-  RED.httpAdmin.get("/portal-react/assets/download/*", READ, (req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/assets/download/*", READ, (req, res) => {
     const rel = req.params[0];
     const target = safePath(rel, assetsDir);
     if (!target) return res.status(400).json({ error: "invalid path" });

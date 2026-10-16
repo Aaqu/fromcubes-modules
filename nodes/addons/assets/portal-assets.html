@@ -80,7 +80,7 @@
       reader.onload = function () {
         $.ajax({
           type: "POST",
-          url: "portal-react/assets/upload/" + item.path.split("/").map(encodeURIComponent).join("/"),
+          url: "fromcubes-react/assets/upload/" + item.path.split("/").map(encodeURIComponent).join("/"),
           data: new Uint8Array(reader.result),
           contentType: "application/octet-stream",
           processData: false,
@@ -139,7 +139,7 @@
       if (!confirm("'" + filename + "' already exists in this folder. Overwrite?")) return;
     }
     $.ajax({
-      type: "POST", url: "portal-react/assets/move",
+      type: "POST", url: "fromcubes-react/assets/move",
       contentType: "application/json",
       data: JSON.stringify({ from: fromPath, to: newPath }),
       success: function () { refreshList(); },
@@ -172,7 +172,7 @@
         RED.notify("Folder '" + name + "' already exists", "warning");
         return;
       }
-      $.ajax({ type: "POST", url: "portal-react/assets/mkdir", contentType: "application/json", data: JSON.stringify({ path: p }),
+      $.ajax({ type: "POST", url: "fromcubes-react/assets/mkdir", contentType: "application/json", data: JSON.stringify({ path: p }),
         success: function () { row.remove(); refreshList(); },
         error: function () { RED.notify("Failed to create folder", "error"); },
       });
@@ -289,7 +289,7 @@
         return;
       }
       $.ajax({
-        type: "POST", url: "portal-react/assets/move",
+        type: "POST", url: "fromcubes-react/assets/move",
         contentType: "application/json",
         data: JSON.stringify({ from: fullPath, to: newPath }),
         success: function () { refreshList(); },
@@ -408,7 +408,7 @@
                 if (!confirm("Delete folder '" + nm + "' and all contents?")) return;
                 $.ajax({
                   type: "DELETE",
-                  url: "portal-react/assets/" + fp.split("/").map(encodeURIComponent).join("/"),
+                  url: "fromcubes-react/assets/" + fp.split("/").map(encodeURIComponent).join("/"),
                   success: function () { refreshList(); },
                   error: function () { RED.notify("Delete failed", "error"); },
                 });
@@ -477,7 +477,7 @@
               }},
               { icon: "fa-download", label: "Download", action: function () {
                 const a = document.createElement("a");
-                a.href = adminRoot + "/portal-react/assets/download/" + fp.split("/").map(encodeURIComponent).join("/");
+                a.href = adminRoot + "/fromcubes-react/assets/download/" + fp.split("/").map(encodeURIComponent).join("/");
                 a.download = nm;
                 document.body.appendChild(a);
                 a.click();
@@ -487,7 +487,7 @@
               { icon: "fa-trash", label: "Delete", danger: true, action: function () {
                 $.ajax({
                   type: "DELETE",
-                  url: "portal-react/assets/" + fp.split("/").map(encodeURIComponent).join("/"),
+                  url: "fromcubes-react/assets/" + fp.split("/").map(encodeURIComponent).join("/"),
                   success: function () { refreshList(); },
                   error: function () { RED.notify("Delete failed: " + nm, "error"); },
                 });
@@ -509,7 +509,7 @@
    * @returns {void}
    */
   function refreshList() {
-    $.getJSON("portal-react/assets", function (entries) {
+    $.getJSON("fromcubes-react/assets", function (entries) {
       allEntries = entries || [];
       renderTree();
     });

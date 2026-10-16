@@ -1,12 +1,12 @@
 <!-- ============================================================
      Portal Code Workspace — sidebar tab + full-screen editor overlay.
-     Served from nodes/editor/ via the /portal-react/editor admin route.
+     Served from nodes/editor/ via the /fromcubes-react/editor admin route.
      ============================================================ -->
-<link rel="stylesheet" href="portal-react/editor/workspace.css" />
-<script type="text/javascript" src="portal-react/editor/file-tree.js"></script>
-<script type="text/javascript" src="portal-react/editor/workspace.js"></script>
-<script type="text/javascript" src="portal-react/editor/format.js"></script>
-<script type="text/javascript" src="portal-react/editor/provider-settings.js"></script>
+<link rel="stylesheet" href="fromcubes-react/editor/workspace.css" />
+<script type="text/javascript" src="fromcubes-react/editor/file-tree.js"></script>
+<script type="text/javascript" src="fromcubes-react/editor/workspace.js"></script>
+<script type="text/javascript" src="fromcubes-react/editor/format.js"></script>
+<script type="text/javascript" src="fromcubes-react/editor/provider-settings.js"></script>
 
 <!-- ============================================================
      Shared: Monaco loader (used by both node editors)
@@ -40,7 +40,7 @@
     window.__fcRefreshCssClasses = function () {
       if (cssClassesPending) return;
       cssClassesPending = true;
-      $.getJSON("portal-react/css-classes", function (data) {
+      $.getJSON("fromcubes-react/css-classes", function (data) {
         if (!data || !Array.isArray(data.classes)) return;
         window.__fcCssEngine = data.engine;
         window.__fcCssClasses = data.classes;
@@ -842,7 +842,7 @@
       };
 
       /**
-       * Fetch the current component registry from `/portal-react/registry`
+       * Fetch the current component registry from `/fromcubes-react/registry`
        * and stash the names on `window.__fcComponentNames` so the JSX-tag
        * completion provider can offer `<Button` etc. Re-fetched on every
        * editor open so newly-added components show up without an editor
@@ -851,7 +851,7 @@
        * @private
        */
       function refreshComponentNames() {
-        $.getJSON("portal-react/registry", function (reg) {
+        $.getJSON("fromcubes-react/registry", function (reg) {
           window.__fcComponentNames = Object.keys(reg);
           console.log(
             PREFIX,
@@ -870,7 +870,7 @@
       // Fetch utility nodes + their parsed top-level symbols.
       // Window cache shape: { byNode: { utilName: [symbol, ...] }, allSymbols: [..] }
       window.__fcRefreshUtilities = function () {
-        $.getJSON("portal-react/utilities", function (reg) {
+        $.getJSON("fromcubes-react/utilities", function (reg) {
           const byNode = {};
           const all = new Set();
           Object.keys(reg).forEach(function (n) {
@@ -1017,7 +1017,7 @@
     };
 
     /**
-     * Lazy-load Monaco from the admin endpoint `/portal-react/vs/` the
+     * Lazy-load Monaco from the admin endpoint `/fromcubes-react/vs/` the
      * first time an editor opens. If Monaco is already on `window`
      * (Node-RED bundled its own copy, or another node loaded it first),
      * skip the loader script and run our setup inline.
@@ -1041,10 +1041,10 @@
         return;
       }
       const s = document.createElement("script");
-      s.src = "portal-react/vs/loader.js";
+      s.src = "fromcubes-react/vs/loader.js";
       s.onload = function () {
         console.log(PREFIX, "loader.js loaded, configuring require paths");
-        require.config({ paths: { vs: "portal-react/vs" } });
+        require.config({ paths: { vs: "fromcubes-react/vs" } });
         require(["vs/editor/editor.main"], function () {
           console.log(PREFIX, "editor.main loaded");
           ensureJsxSetup();
@@ -2084,7 +2084,7 @@ function useDebounce(value, ms = 300) {
         });
 
         $("#fc-btn-components").on("click", function () {
-          $.getJSON("portal-react/registry", function (reg) {
+          $.getJSON("fromcubes-react/registry", function (reg) {
             const names = Object.keys(reg).sort();
             if (!names.length) {
               RED.notify("No component nodes on canvas.", "warning");
@@ -2197,7 +2197,7 @@ function useDebounce(value, ms = 300) {
         });
 
         $("#fc-btn-utilities").on("click", function () {
-          $.getJSON("portal-react/utilities", function (reg) {
+          $.getJSON("fromcubes-react/utilities", function (reg) {
             // Refresh global cache too so completion provider picks up changes
             if (window.__fcRefreshUtilities) window.__fcRefreshUtilities();
             const names = Object.keys(reg).sort();

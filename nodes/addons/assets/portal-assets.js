@@ -23,5 +23,5 @@ module.exports = function (RED) {
   });
   // A plugin with no type: registered so Node-RED lists it with its module
   // and loads portal-assets.html into the editor.
-  RED.plugins.registerPlugin("fromcubes-portal-assets", {});
+  RED.plugins.registerPlugin("fromcubes-assets", {});
 };

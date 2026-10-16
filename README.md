@@ -242,7 +242,7 @@ auth proxy or a different CSS tool:
 // package.json: "node-red": { "plugins": { "my-providers": "plugin.js" } }
 module.exports = function (RED) {
   RED.plugins.registerPlugin("my-sso", {
-    type: "fromcubes-portal-identity",
+    type: "fromcubes-identity",
     apiVersion: 1,
     async resolveUser(req) {          // HTTP request or WS upgrade request
       const claims = await verify(req.headers.authorization);
@@ -250,7 +250,7 @@ module.exports = function (RED) {
     },
   });
   RED.plugins.registerPlugin("my-css", {
-    type: "fromcubes-portal-css",
+    type: "fromcubes-css",
     apiVersion: 1,
     async generate(source) {          // the portal's full source, components included
       return { css: await compileMyCss(source) };
@@ -333,7 +333,7 @@ Import **Shared Components** first — it provides the UI building blocks (Page,
 | Red status "legacy endpoint" on deploy | Flow was saved before the `/fromcubes/` prefix became hardcoded. Open the node, set **Sub-path**, redeploy. Automatic migration is disabled to avoid silent URL changes. |
 | Red status "bad sub-path" | Sub-path is empty or violates the rules (no leading `/`, no whitespace, no `..`, segments must start alphanumerically, `public`/`_ws` reserved). |
 | Yellow status "css-fail" | Tailwind generation failed (usually an invalid class in JSX). Page still loads but unstyled. Fix the class, redeploy — the status clears on the next successful build. |
-| Code editor stays blank / `portal-react/vs/loader.js` 404s | Monaco is served live from the package's own `node_modules` at `/portal-react/vs` (no postinstall copy step). The 404 means `RED.httpAdmin` is mounted under a non-root `httpAdminRoot` the editor didn't account for, or `monaco-editor` failed to install. Reinstall the package and hard-refresh the editor (`Cmd/Ctrl-Shift-R`). |
+| Code editor stays blank / `fromcubes-react/vs/loader.js` 404s | Monaco is served live from the package's own `node_modules` at `/fromcubes-react/vs` (no postinstall copy step). The 404 means `RED.httpAdmin` is mounted under a non-root `httpAdminRoot` the editor didn't account for, or `monaco-editor` failed to install. Reinstall the package and hard-refresh the editor (`Cmd/Ctrl-Shift-R`). |
 | `npm install @aaqu/fromcubes-portal-react` ends with `EACCES` | The Node-RED `userDir/node_modules` install path is not writable by the user running Node-RED. Re-run `npm install` from a shell with the right ownership. |
 | Browser request `/fromcubes/css/<hash>.css` returns 404 | The portal's deploy hasn't produced a CSS bundle yet — open the editor, redeploy. If the URL is bookmarked from before a deploy, the hash is stale; reload the portal page itself. With a custom `httpNodeRoot`, prepend it to this path. |
 | WebSocket reconnects in an endless loop | Reverse-proxy is not forwarding `Upgrade: websocket` on `/fromcubes/<sub-path>/_ws`. Check the proxy config — nginx needs `proxy_set_header Upgrade $http_upgrade`, Traefik needs the `websocket` middleware. |

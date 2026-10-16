@@ -158,7 +158,7 @@
     const settle = function () {
       if (--pending === 0 && done) done();
     };
-    $.getJSON("portal-react/registry", function (reg) {
+    $.getJSON("fromcubes-react/registry", function (reg) {
       compErrors = {};
       Object.keys(reg || {}).forEach(function (n) {
         if (reg[n] && reg[n].error) compErrors[n] = reg[n].error;
@@ -168,7 +168,7 @@
         compErrors = {};
       })
       .always(settle);
-    $.getJSON("portal-react/utilities", function (reg) {
+    $.getJSON("fromcubes-react/utilities", function (reg) {
       utilErrors = {};
       Object.keys(reg || {}).forEach(function (n) {
         if (reg[n] && reg[n].error) utilErrors[n] = reg[n].error;
@@ -636,7 +636,7 @@
    * @returns {void}
    */
   function injectIconSprite() {
-    $.ajax({ url: "portal-react/editor/icons.svg", dataType: "text" })
+    $.ajax({ url: "fromcubes-react/editor/icons.svg", dataType: "text" })
       .done(function (markup) {
         $("<div>")
           .attr("id", "fc-ws-icon-sprite")
@@ -1107,7 +1107,7 @@
     const brand = $("<div>").addClass("fc-ws-brand").appendTo(header);
     $("<img>")
       .addClass("fc-ws-mark-logo")
-      .attr("src", "portal-react/editor/mark.svg")
+      .attr("src", "fromcubes-react/editor/mark.svg")
       .attr("alt", "fromcubes")
       .appendTo(brand);
     // One word split by colour — wrapped so the lockup's gap sits between the
@@ -1471,7 +1471,7 @@
       });
     $("<img>")
       .addClass("fc-ws-statusbar-icon")
-      .attr("src", "portal-react/icons/fromcubes-react.svg")
+      .attr("src", "fromcubes-react/icons/fromcubes-react.svg")
       .attr("alt", "")
       .appendTo(el);
     $("<span>").text(EDITOR_NAME).appendTo(el);

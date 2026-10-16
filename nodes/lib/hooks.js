@@ -3,7 +3,7 @@
  *
  * Plugins register with Node-RED via:
  *   RED.plugins.registerPlugin("my-plugin", {
- *     type: "fromcubes-portal-react",
+ *     type: "fromcubes-hooks",
  *     hooks: {
  *       onIsValidConnection(request)         { return true },
  *       onCanSendTo(ws, msg)                 { return true },
@@ -18,9 +18,14 @@
  *   may return a new msg. Returning undefined keeps the current msg.
  * - Any thrown exception is treated as `false` for allow hooks and
  *   logged via RED.log.error. Transform hooks log and skip the step.
+ *
+ * The type was "fromcubes-portal-react" before the packages were renamed;
+ * plugins still registering under it keep working, with a warning logged
+ * once per plugin. Drop LEGACY_PLUGIN_TYPE in the next major version.
  */
 
-const PLUGIN_TYPE = "fromcubes-portal-react";
+const PLUGIN_TYPE = "fromcubes-hooks";
+const LEGACY_PLUGIN_TYPE = "fromcubes-portal-react";
 
 /**
  * Build a plugin-hook dispatcher bound to `RED`.
@@ -29,6 +34,20 @@ const PLUGIN_TYPE = "fromcubes-portal-react";
  * @returns {{ allow: Function, transform: Function, hasHook: Function, PLUGIN_TYPE: string }}
  */
 module.exports = function (RED) {
+  const warnedLegacy = new Set();
+
+  /**
+   * Plugins of `type`, never throwing.
+   * @param {string} type
+   * @returns {Array<Object>}
+   */
+  function byType(type) {
+    try {
+      return RED.plugins.getByType(type) || [];
+    } catch (_) {
+      return [];
+    }
+  }
   /**
    * Collect hook functions for a given name across all registered plugins
    * of type `PLUGIN_TYPE`. Returns an empty list when no plugins or when
@@ -38,12 +57,17 @@ module.exports = function (RED) {
    * @returns {Array<{ fn: Function, id: string }>}
    */
   function getHooks(name) {
-    let plugins = [];
-    try {
-      plugins = RED.plugins.getByType(PLUGIN_TYPE) || [];
-    } catch (_) {
-      return [];
+    const legacy = byType(LEGACY_PLUGIN_TYPE);
+    for (const p of legacy) {
+      const id = (p && (p.id || p.name)) || "?";
+      if (warnedLegacy.has(id)) continue;
+      warnedLegacy.add(id);
+      RED.log.warn(
+        `[portal-react] plugin "${id}" uses the old hook type "${LEGACY_PLUGIN_TYPE}"; ` +
+          `register it as "${PLUGIN_TYPE}" — the old type goes away in the next major version`,
+      );
     }
+    const plugins = [...byType(PLUGIN_TYPE), ...legacy];
     const out = [];
     for (const p of plugins) {
       const fn = p && p.hooks && p.hooks[name];
@@ -118,3 +142,4 @@ module.exports = function (RED) {
 };
 
 module.exports.PLUGIN_TYPE = PLUGIN_TYPE;
+module.exports.LEGACY_PLUGIN_TYPE = LEGACY_PLUGIN_TYPE;

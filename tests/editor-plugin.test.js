@@ -58,42 +58,42 @@ test("serves generated portal CSS only from the public runtime route", async () 
   );
   expect(publicCss.text).toBe(".text-red-500{color:red}");
 
-  const adminCss = await request(app).get("/portal-react/css/abc123.css");
+  const adminCss = await request(app).get("/fromcubes-react/css/abc123.css");
   expect(adminCss.status).toBe(404);
 });
 
 test("serves the workspace plugin script", async () => {
-  const res = await request(app).get("/portal-react/editor/workspace.js");
+  const res = await request(app).get("/fromcubes-react/editor/workspace.js");
   expect(res.status).toBe(200);
   expect(res.headers["content-type"]).toMatch(/javascript/);
   expect(res.text).toContain("fromcubes-react-editor");
 });
 
 test("serves the file-tree helper and the stylesheet", async () => {
-  const js = await request(app).get("/portal-react/editor/file-tree.js");
+  const js = await request(app).get("/fromcubes-react/editor/file-tree.js");
   expect(js.status).toBe(200);
   expect(js.text).toContain("collectPortalFiles");
 
-  const css = await request(app).get("/portal-react/editor/workspace.css");
+  const css = await request(app).get("/fromcubes-react/editor/workspace.css");
   expect(css.status).toBe(200);
   expect(css.headers["content-type"]).toMatch(/css/);
 });
 
 test("serves the bare mark used in the overlay header", async () => {
-  const res = await request(app).get("/portal-react/editor/mark.svg");
+  const res = await request(app).get("/fromcubes-react/editor/mark.svg");
   expect(res.status).toBe(200);
   expect(res.headers["content-type"]).toMatch(/svg/);
   expect(res.body.toString()).toContain('fill="currentColor"');
 });
 
 test("serves the node icon to the editor without hardcoding the package name", async () => {
-  const res = await request(app).get("/portal-react/icons/fromcubes-react.svg");
+  const res = await request(app).get("/fromcubes-react/icons/fromcubes-react.svg");
   expect(res.status).toBe(200);
   expect(res.headers["content-type"]).toMatch(/svg/);
 });
 
 test("does not expose files above the editor directory", async () => {
-  const res = await request(app).get("/portal-react/editor/../portal-react.js");
+  const res = await request(app).get("/fromcubes-react/editor/../portal-react.js");
   expect(res.status).toBe(404);
 });
 
@@ -112,7 +112,7 @@ test("workspace registers a status bar button and a per-node entry point", () =>
 });
 
 test("the icon sprite ships every symbol the tree asks for", async () => {
-  const res = await request(app).get("/portal-react/editor/icons.svg");
+  const res = await request(app).get("/fromcubes-react/editor/icons.svg");
   expect(res.status).toBe(200);
   expect(res.headers["content-type"]).toMatch(/svg/);
   const svg = res.body.toString();
@@ -170,7 +170,7 @@ test("disabled nodes and flows are shown as such", () => {
 });
 
 test("the brand font ships with its licence and is wired up", async () => {
-  const res = await request(app).get("/portal-react/editor/ark-pixel.woff2");
+  const res = await request(app).get("/fromcubes-react/editor/ark-pixel.woff2");
   expect(res.status).toBe(200);
   // wOF2 magic — a truncated or LFS-pointer file would still 200.
   expect(res.body.slice(0, 4).toString("latin1")).toBe("wOF2");
@@ -310,7 +310,7 @@ test("serves Prettier's browser builds from node_modules", async () => {
     "plugins/estree.js",
     "plugins/html.js",
   ]) {
-    const res = await request(app).get("/portal-react/prettier/" + file);
+    const res = await request(app).get("/fromcubes-react/prettier/" + file);
     expect(res.status, file).toBe(200);
     expect(res.headers["content-type"], file).toMatch(/javascript/);
   }
@@ -344,7 +344,7 @@ test("formatting stands the TS formatter down only after Prettier loads", () => 
 
 test("the editor template loads the formatting plugin", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="portal-react/editor/format.js"');
+  expect(html).toContain('src="fromcubes-react/editor/format.js"');
 });
 
 // ── Node icon ─────────────────────────────────────────────────
@@ -393,9 +393,9 @@ test("the Lucide notice ships with the package", () => {
 
 test("portal-react.html loads both editor scripts and the stylesheet", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="portal-react/editor/file-tree.js"');
-  expect(html).toContain('src="portal-react/editor/workspace.js"');
-  expect(html).toContain('href="portal-react/editor/workspace.css"');
+  expect(html).toContain('src="fromcubes-react/editor/file-tree.js"');
+  expect(html).toContain('src="fromcubes-react/editor/workspace.js"');
+  expect(html).toContain('href="fromcubes-react/editor/workspace.css"');
   // The overlay reuses the dialog's registry-name cache refresher.
   expect(html).toContain("window.__fcRefreshComponentNames = refreshComponentNames");
 });
@@ -403,15 +403,15 @@ test("portal-react.html loads both editor scripts and the stylesheet", () => {
 // ── Settings → Fromcubes (provider choice) ────────────────────
 
 test("serves the provider settings pane and portal-react.html loads it", async () => {
-  const res = await request(app).get("/portal-react/editor/provider-settings.js");
+  const res = await request(app).get("/fromcubes-react/editor/provider-settings.js");
   expect(res.status).toBe(200);
   expect(res.text).toContain("RED.userSettings.add");
   // Node-RED shows a settings pane by this exact element id.
   expect(res.text).toContain('"red-ui-settings-tab-" + PANE_ID');
-  expect(res.text).toContain('"portal-react/providers"');
+  expect(res.text).toContain('"fromcubes-react/providers"');
 
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="portal-react/editor/provider-settings.js"');
+  expect(html).toContain('src="fromcubes-react/editor/provider-settings.js"');
 });
 
 test("portal page reloads on the server's identity-change frame", () => {
@@ -428,7 +428,7 @@ test("className completion loads from the engine-aware endpoint everywhere", () 
     expect(src).not.toContain("tw-classes");
     expect(src).not.toContain("__fcTwClasses");
   }
-  expect(html).toContain('$.getJSON("portal-react/css-classes"');
+  expect(html).toContain('$.getJSON("fromcubes-react/css-classes"');
   // portal, component and utility dialogs each refresh on open
   expect(html.match(/window\.__fcRefreshCssClasses\(\);/g)).toHaveLength(3);
   expect(ws).toContain("window.__fcRefreshCssClasses()");

@@ -42,7 +42,7 @@ function registerAdminApi(RED, deps) {
   // editor/editor.main.js) sits in the same directory.
   const monacoVsPath = path.dirname(require.resolve("monaco-editor"));
   RED.httpAdmin.use(
-    "/portal-react/vs",
+    "/fromcubes-react/vs",
     permRead,
     express.static(monacoVsPath),
   );
@@ -51,7 +51,7 @@ function registerAdminApi(RED, deps) {
   // as static files instead of being inlined into portal-react.html so the
   // node's editor template stays readable.
   RED.httpAdmin.use(
-    "/portal-react/editor",
+    "/fromcubes-react/editor",
     permRead,
     express.static(path.join(__dirname, "..", "editor")),
   );
@@ -60,15 +60,15 @@ function registerAdminApi(RED, deps) {
   // directory here keeps one copy on disk and spares the client from having to
   // know the package name that Node-RED's own /icons route is keyed by.
   RED.httpAdmin.use(
-    "/portal-react/icons",
+    "/fromcubes-react/icons",
     permRead,
     express.static(path.join(__dirname, "..", "icons")),
   );
 
   // Prettier's browser builds, straight from node_modules — same arrangement
-  // as Monaco at /portal-react/vs. Nothing is fetched until someone formats.
+  // as Monaco at /fromcubes-react/vs. Nothing is fetched until someone formats.
   RED.httpAdmin.use(
-    "/portal-react/prettier",
+    "/fromcubes-react/prettier",
     permRead,
     express.static(path.dirname(require.resolve("prettier/package.json"))),
   );
@@ -101,12 +101,12 @@ function registerAdminApi(RED, deps) {
   RED.httpNode.get("/fromcubes/css/:hash.css", serveCss);
 
 
-  RED.httpAdmin.get("/portal-react/registry", permRead, (_req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/registry", permRead, (_req, res) => {
     res.json(registry);
   });
 
   RED.httpAdmin.post(
-    "/portal-react/registry",
+    "/fromcubes-react/registry",
     permWrite,
     csrfGuard,
     rateLimit,
@@ -118,7 +118,7 @@ function registerAdminApi(RED, deps) {
   );
 
   RED.httpAdmin.delete(
-    "/portal-react/registry/:name",
+    "/fromcubes-react/registry/:name",
     permWrite,
     csrfGuard,
     rateLimit,
@@ -129,7 +129,7 @@ function registerAdminApi(RED, deps) {
     },
   );
 
-  RED.httpAdmin.get("/portal-react/utilities", permRead, (_req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/utilities", permRead, (_req, res) => {
     const out = {};
     for (const [name, u] of Object.entries(utilities)) {
       out[name] = {
@@ -142,7 +142,7 @@ function registerAdminApi(RED, deps) {
   });
 
   RED.httpAdmin.post(
-    "/portal-react/utilities",
+    "/fromcubes-react/utilities",
     permWrite,
     csrfGuard,
     rateLimit,
@@ -154,7 +154,7 @@ function registerAdminApi(RED, deps) {
   );
 
   RED.httpAdmin.delete(
-    "/portal-react/utilities/:name",
+    "/fromcubes-react/utilities/:name",
     permWrite,
     csrfGuard,
     rateLimit,
@@ -189,13 +189,13 @@ function registerProviderRoutes(RED, deps) {
   const parseJson = express.json({ limit: (RED.settings && RED.settings.apiMaxLength) || "5mb" });
   const jsonBody = (req, res, next) => (req._body ? next() : parseJson(req, res, next));
 
-  RED.httpAdmin.get("/portal-react/providers", permRead, (_req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/providers", permRead, (_req, res) => {
     res.json(providers.describe());
   });
 
   // Completion list for className="…", from whichever CSS engine is in force.
   // `engine` lets the editor tell a stale list from a fresh one.
-  RED.httpAdmin.get("/portal-react/css-classes", permRead, async (_req, res) => {
+  RED.httpAdmin.get("/fromcubes-react/css-classes", permRead, async (_req, res) => {
     try {
       res.json(await providers.editorClasses());
     } catch (e) {
@@ -205,7 +205,7 @@ function registerProviderRoutes(RED, deps) {
   });
 
   RED.httpAdmin.put(
-    "/portal-react/providers",
+    "/fromcubes-react/providers",
     permWrite,
     csrfGuard,
     rateLimit,

@@ -2,7 +2,7 @@
  * Settings → Fromcubes: choose the identity provider and the CSS engine.
  *
  * Exactly one provider per kind, shown as a radio list, so two can never be
- * active at once. Reads and writes `/portal-react/providers`; the server
+ * active at once. Reads and writes `/fromcubes-react/providers`; the server
  * validates, persists to <userDir>/fromcubes/providers.json, and applies the
  * change (identity: every portal session reloads; css: every portal rebuilds).
  * A kind set in settings.js is shown locked.
@@ -15,7 +15,7 @@
   "use strict";
 
   var PANE_ID = "fromcubes";
-  var URL = "portal-react/providers";
+  var URL = "fromcubes-react/providers";
 
   var KINDS = [
     {

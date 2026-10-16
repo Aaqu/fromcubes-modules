@@ -6,13 +6,13 @@
  * Two extension points, each a Node-RED plugin type:
  *
  *   RED.plugins.registerPlugin("my-sso", {
- *     type: "fromcubes-portal-identity",
+ *     type: "fromcubes-identity",
  *     apiVersion: 1,
  *     resolveUser(req) { return { userId, login, displayName, email, role, groups } | null },
  *   })
  *
  *   RED.plugins.registerPlugin("my-css", {
- *     type: "fromcubes-portal-css",
+ *     type: "fromcubes-css",
  *     apiVersion: 1,
  *     generate(source) { return { css } },
  *     editor: { classes() { return ["p-4", …] } },   // optional: completion
@@ -44,8 +44,8 @@
  *   build turns into the yellow `css-fail` status (page still served).
  */
 
-const IDENTITY_TYPE = "fromcubes-portal-identity";
-const CSS_TYPE = "fromcubes-portal-css";
+const IDENTITY_TYPE = "fromcubes-identity";
+const CSS_TYPE = "fromcubes-css";
 const API_VERSION = 1;
 
 const DEFAULT_IDENTITY = "headers";

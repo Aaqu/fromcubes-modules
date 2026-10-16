@@ -1,5 +1,5 @@
 /**
- * /portal-react/providers — the admin API behind Settings → Fromcubes.
+ * /fromcubes-react/providers — the admin API behind Settings → Fromcubes.
  * Real provider registry and real admin-api wiring; only RED is faked.
  */
 
@@ -74,7 +74,7 @@ function build({ plugins = [] } = {}) {
 }
 
 const put = (body) =>
-  request(app).put("/portal-react/providers").set("Node-RED-API-Version", "v2").send(body);
+  request(app).put("/fromcubes-react/providers").set("Node-RED-API-Version", "v2").send(body);
 
 beforeEach(() => {
   tmpDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "provider-routes-")));
@@ -84,11 +84,11 @@ afterEach(() => fs.rmSync(tmpDir, { recursive: true, force: true }));
 
 test("GET describes both kinds behind the read permission", async () => {
   build();
-  const res = await request(app).get("/portal-react/providers");
+  const res = await request(app).get("/fromcubes-react/providers");
   expect(res.status).toBe(200);
   expect(res.body.identity.selected).toBe("headers");
   expect(res.body.css.selected).toBe("tailwind");
-  expect(gate.read).toContain("GET /portal-react/providers");
+  expect(gate.read).toContain("GET /fromcubes-react/providers");
 });
 
 test("PUT changes the provider, persists, notifies and logs who did it", async () => {
@@ -106,7 +106,7 @@ test("PUT changes the provider, persists, notifies and logs who did it", async (
     JSON.parse(fs.readFileSync(path.join(tmpDir, "fromcubes", "providers.json"), "utf8")),
   ).toEqual({ identity: "sso" });
   for (const list of [gate.write, gate.csrf, gate.rate]) {
-    expect(list).toContain("PUT /portal-react/providers");
+    expect(list).toContain("PUT /fromcubes-react/providers");
   }
 });
 
@@ -120,7 +120,7 @@ test("PUT of the provider already in force does not notify", async () => {
 
 test("PUT without the CSRF header is refused before anything changes", async () => {
   build();
-  const res = await request(app).put("/portal-react/providers").send({ kind: "css", id: "none" });
+  const res = await request(app).put("/fromcubes-react/providers").send({ kind: "css", id: "none" });
   expect(res.status).toBe(403);
   expect(changes).toEqual([]);
   expect(fs.existsSync(path.join(tmpDir, "fromcubes", "providers.json"))).toBe(false);
@@ -180,24 +180,24 @@ test("no providers dependency, no routes", async () => {
     extractUtilitySymbols: () => new Set(),
   });
   const a = express().use(RED.httpAdmin);
-  expect((await request(a).get("/portal-react/providers")).status).toBe(404);
+  expect((await request(a).get("/fromcubes-react/providers")).status).toBe(404);
 });
 
-test("GET /portal-react/css-classes lists the engine in force, behind read permission", async () => {
+test("GET /fromcubes-react/css-classes lists the engine in force, behind read permission", async () => {
   const providers = build();
-  let res = await request(app).get("/portal-react/css-classes");
+  let res = await request(app).get("/fromcubes-react/css-classes");
   expect(res.status).toBe(200);
   // The TAILWIND stand-in has no editor.classes(), so the list is empty
   // here; the real add-on's list is covered in providers.test.js.
   expect(res.body).toEqual({ engine: "tailwind", classes: [] });
-  expect(gate.read).toContain("GET /portal-react/css-classes");
+  expect(gate.read).toContain("GET /fromcubes-react/css-classes");
 
   providers.select("css", "none");
-  res = await request(app).get("/portal-react/css-classes");
+  res = await request(app).get("/fromcubes-react/css-classes");
   expect(res.body).toEqual({ engine: "none", classes: [] });
 });
 
-test("the old /portal-react/tw-classes route is gone", async () => {
+test("the old /fromcubes-react/tw-classes route is gone", async () => {
   build();
-  expect((await request(app).get("/portal-react/tw-classes")).status).toBe(404);
+  expect((await request(app).get("/fromcubes-react/tw-classes")).status).toBe(404);
 });

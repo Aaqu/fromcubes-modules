@@ -235,26 +235,26 @@ describe("HTTP endpoints", () => {
     app.use(mockRED.httpAdmin);
   });
 
-  describe("GET /portal-react/assets", () => {
+  describe("GET /fromcubes-react/assets", () => {
     it("returns empty array for empty dir", async () => {
-      const res = await request(app).get("/portal-react/assets");
+      const res = await request(app).get("/fromcubes-react/assets");
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     });
 
     it("returns file listing", async () => {
       fs.writeFileSync(path.join(tmpDir, "test.txt"), "hi");
-      const res = await request(app).get("/portal-react/assets");
+      const res = await request(app).get("/fromcubes-react/assets");
       expect(res.status).toBe(200);
       expect(res.body).toHaveLength(1);
       expect(res.body[0].name).toBe("test.txt");
     });
   });
 
-  describe("POST /portal-react/assets/mkdir", () => {
+  describe("POST /fromcubes-react/assets/mkdir", () => {
     it("creates directory", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/mkdir")
+        .post("/fromcubes-react/assets/mkdir")
         .send({ path: "new-dir" });
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ ok: true });
@@ -263,17 +263,17 @@ describe("HTTP endpoints", () => {
 
     it("returns 400 for invalid path", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/mkdir")
+        .post("/fromcubes-react/assets/mkdir")
         .send({ path: "../escape" });
       expect(res.status).toBe(400);
     });
   });
 
-  describe("POST /portal-react/assets/move", () => {
+  describe("POST /fromcubes-react/assets/move", () => {
     it("renames file", async () => {
       fs.writeFileSync(path.join(tmpDir, "old.txt"), "data");
       const res = await request(app)
-        .post("/portal-react/assets/move")
+        .post("/fromcubes-react/assets/move")
         .send({ from: "old.txt", to: "new.txt" });
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ ok: true });
@@ -283,16 +283,16 @@ describe("HTTP endpoints", () => {
 
     it("returns 400 for invalid from path", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/move")
+        .post("/fromcubes-react/assets/move")
         .send({ from: "../bad", to: "ok.txt" });
       expect(res.status).toBe(400);
     });
   });
 
-  describe("POST /portal-react/assets/upload/*", () => {
+  describe("POST /fromcubes-react/assets/upload/*", () => {
     it("uploads file", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/upload/photo.png")
+        .post("/fromcubes-react/assets/upload/photo.png")
         .set("Content-Type", "application/octet-stream")
         .send(Buffer.from("fake-png-data"));
       expect(res.status).toBe(200);
@@ -302,7 +302,7 @@ describe("HTTP endpoints", () => {
 
     it("returns 400 for invalid path", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/upload/.hidden")
+        .post("/fromcubes-react/assets/upload/.hidden")
         .set("Content-Type", "application/octet-stream")
         .send(Buffer.from("bad"));
       expect(res.status).toBe(400);
@@ -310,7 +310,7 @@ describe("HTTP endpoints", () => {
 
     it("uploads into nested directory", async () => {
       const res = await request(app)
-        .post("/portal-react/assets/upload/sub/dir/file.bin")
+        .post("/fromcubes-react/assets/upload/sub/dir/file.bin")
         .set("Content-Type", "application/octet-stream")
         .send(Buffer.from("nested"));
       expect(res.status).toBe(200);
@@ -318,25 +318,25 @@ describe("HTTP endpoints", () => {
     });
   });
 
-  describe("DELETE /portal-react/assets/*", () => {
+  describe("DELETE /fromcubes-react/assets/*", () => {
     it("deletes existing file", async () => {
       fs.writeFileSync(path.join(tmpDir, "del.txt"), "bye");
-      const res = await request(app).delete("/portal-react/assets/del.txt");
+      const res = await request(app).delete("/fromcubes-react/assets/del.txt");
       expect(res.status).toBe(200);
       expect(res.body).toEqual({ ok: true });
       expect(fs.existsSync(path.join(tmpDir, "del.txt"))).toBe(false);
     });
 
     it("returns 400 for invalid path", async () => {
-      const res = await request(app).delete("/portal-react/assets/..%2Fetc");
+      const res = await request(app).delete("/fromcubes-react/assets/..%2Fetc");
       expect(res.status).toBe(400);
     });
   });
 
-  describe("GET /portal-react/assets/download/*", () => {
+  describe("GET /fromcubes-react/assets/download/*", () => {
     it("downloads file with correct headers", async () => {
       fs.writeFileSync(path.join(tmpDir, "dl.txt"), "content");
-      const res = await request(app).get("/portal-react/assets/download/dl.txt");
+      const res = await request(app).get("/fromcubes-react/assets/download/dl.txt");
       expect(res.status).toBe(200);
       expect(res.headers["content-disposition"]).toContain("dl.txt");
       expect(res.text).toBe("content");
@@ -344,13 +344,13 @@ describe("HTTP endpoints", () => {
 
     it("returns 400 for directory download", async () => {
       fs.mkdirSync(path.join(tmpDir, "adir"));
-      const res = await request(app).get("/portal-react/assets/download/adir");
+      const res = await request(app).get("/fromcubes-react/assets/download/adir");
       expect(res.status).toBe(400);
       expect(res.body.error).toBe("is a directory");
     });
 
     it("returns 404 for non-existent file", async () => {
-      const res = await request(app).get("/portal-react/assets/download/nope.txt");
+      const res = await request(app).get("/fromcubes-react/assets/download/nope.txt");
       expect(res.status).toBe(404);
     });
   });

@@ -6,12 +6,12 @@
 
 const makeHooks = require("../nodes/lib/hooks");
 
-function fakeRED(plugins = []) {
+function fakeRED(plugins = [], legacy = []) {
   const errors = [];
   return {
     plugins: {
       getByType: (type) =>
-        type === "fromcubes-portal-react" ? plugins : [],
+        type === "fromcubes-hooks" ? plugins : type === "fromcubes-portal-react" ? legacy : [],
     },
     log: {
       error: (m) => errors.push(m),
@@ -159,5 +159,27 @@ describe("hooks.hasHook", () => {
     );
     expect(hooks.hasHook("onInbound")).toBe(true);
     expect(hooks.hasHook("onCanSendTo")).toBe(false);
+  });
+});
+
+describe("legacy hook type", () => {
+  it("plugins on the old type still run, after the new ones, with one warning each", () => {
+    const calls = [];
+    const red = fakeRED(
+      [{ id: "new", hooks: { onInbound: (m) => (calls.push("new"), m) } }],
+      [{ id: "old", hooks: { onInbound: (m) => (calls.push("old"), m) } }],
+    );
+    const hooks = makeHooks(red);
+    hooks.transform("onInbound", {});
+    hooks.transform("onInbound", {});
+    expect(calls).toEqual(["new", "old", "new", "old"]);
+    const warnings = red._errors.filter((m) => /old hook type/.test(m));
+    expect(warnings).toHaveLength(1);
+    expect(warnings[0]).toMatch(/"old".*"fromcubes-portal-react".*"fromcubes-hooks"/);
+  });
+
+  it("an old-type plugin can still veto a connection", () => {
+    const hooks = makeHooks(fakeRED([], [{ id: "old", hooks: { onIsValidConnection: () => false } }]));
+    expect(hooks.allow("onIsValidConnection", {})).toBe(false);
   });
 });

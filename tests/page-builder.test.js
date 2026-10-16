@@ -20,7 +20,7 @@ describe("buildPage stylesheet URL", () => {
     expect(html).toContain(
       '<link rel="stylesheet" href="/fromcubes/css/abc123.css">',
     );
-    expect(html).not.toContain("/portal-react/css/");
+    expect(html).not.toContain("/fromcubes-react/css/");
   });
 
   it("includes a custom httpNodeRoot", () => {

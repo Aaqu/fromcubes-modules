@@ -107,7 +107,7 @@ test("the core never requires an add-on", () => {
 test("core editor HTML carries no add-on UI", () => {
   const html = fs.readFileSync(path.join(NODES, "portal-react.html"), "utf8");
   expect(html).not.toContain("fromcubes-public");
-  expect(html).not.toContain("portal-react/assets");
+  expect(html).not.toContain("fromcubes-react/assets");
 });
 
 test("each add-on plugin registers itself with RED.plugins", () => {

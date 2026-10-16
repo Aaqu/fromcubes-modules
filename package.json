@@ -21,7 +21,7 @@
     "plugins": {
       "fromcubes-auth-headers": "nodes/addons/auth-headers/auth-headers.js",
       "fromcubes-tailwind": "nodes/addons/tailwind/tailwind.js",
-      "fromcubes-portal-assets": "nodes/addons/assets/portal-assets.js"
+      "fromcubes-assets": "nodes/addons/assets/portal-assets.js"
     }
   },
   "files": [

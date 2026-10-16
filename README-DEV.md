@@ -470,7 +470,7 @@ without forking this module.
 
 ```javascript
 RED.plugins.registerPlugin("my-portal-rbac", {
-  type: "fromcubes-portal-react",
+  type: "fromcubes-hooks",
   hooks: {
     // Reject the WebSocket upgrade entirely.
     onIsValidConnection(request) {
@@ -533,7 +533,7 @@ in the Node-RED log. If your hook is silent: confirm the plugin package is in
    ```javascript
    module.exports = function (RED) {
      RED.plugins.registerPlugin("portal-rbac", {
-       type: "fromcubes-portal-react",
+       type: "fromcubes-hooks",
        hooks: {
          onInbound(msg, ws) {
            const u = ws._portalUser;
@@ -594,12 +594,12 @@ read-only.
 
 | Method | Route | Router | Purpose |
 |---|---|---|---|
-| GET | `/portal-react/assets` | admin | List all files/dirs |
-| POST | `/portal-react/assets/mkdir` | admin | Create directory |
-| POST | `/portal-react/assets/move` | admin | Move / rename |
-| POST | `/portal-react/assets/upload/*` | admin | Upload (raw body, 100 MB cap) |
-| DELETE | `/portal-react/assets/*` | admin | Delete file/dir |
-| GET | `/portal-react/assets/download/*` | admin | Download with `attachment` disposition |
+| GET | `/fromcubes-react/assets` | admin | List all files/dirs |
+| POST | `/fromcubes-react/assets/mkdir` | admin | Create directory |
+| POST | `/fromcubes-react/assets/move` | admin | Move / rename |
+| POST | `/fromcubes-react/assets/upload/*` | admin | Upload (raw body, 100 MB cap) |
+| DELETE | `/fromcubes-react/assets/*` | admin | Delete file/dir |
+| GET | `/fromcubes-react/assets/download/*` | admin | Download with `attachment` disposition |
 | GET | `/fromcubes/public/*` | node (public) | Serve uploaded files |
 
 **Path safety** (`safePath`): rejects empty input, > 1024 bytes, NUL, `..`/`.`,
@@ -651,11 +651,11 @@ nodes/
                         manages WS lifecycle, builds bundles, runs the rebuild
                         scheduler, mounts admin REST + CSS + assets routes.
   portal-react.html     Editor UI for all three node types: Monaco (served from
-                        node_modules at /portal-react/vs), Tailwind + JSX +
+                        node_modules at /fromcubes-react/vs), Tailwind + JSX +
                         utility-symbol autocompletion, Components and Utilities
                         dialogs, Portal Assets sidebar.
   tw-candidates.js      Generates the ~19k Tailwind class-name list for editor
-                        autocompletion (cached, served at /portal-react/tw-classes).
+                        autocompletion (cached, served at /fromcubes-react/tw-classes).
   lib/
     helpers.js          hash, transpile, generateCSS, validators, missing-ref
                         detection, serveableHash/hasFreshBuild, disk cache.
