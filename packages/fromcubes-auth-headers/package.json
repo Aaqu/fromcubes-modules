@@ -1,0 +1,52 @@
+{
+  "name": "@aaqu/fromcubes-auth-headers",
+  "version": "0.1.0",
+  "description": "Fromcubes identity provider: users from x-portal-user-* headers set by a reverse proxy",
+  "type": "commonjs",
+  "keywords": [
+    "node-red",
+    "fromcubes",
+    "auth",
+    "identity",
+    "proxy"
+  ],
+  "node-red": {
+    "version": ">=4.0.0",
+    "plugins": {
+      "fromcubes-auth-headers": "auth-headers.js"
+    }
+  },
+  "files": [
+    "auth-headers.js",
+    "headers.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.5"
+  },
+  "peerDependencies": {
+    "@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aaqu/fromcubes-modules.git",
+    "directory": "packages/fromcubes-auth-headers"
+  },
+  "bugs": {
+    "url": "https://github.com/Aaqu/fromcubes-modules/issues"
+  },
+  "homepage": "https://aaqu.github.io/fromcubes-modules/",
+  "funding": {
+    "type": "ko-fi",
+    "url": "https://ko-fi.com/L4L01UOFRG"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Aaqu",
+    "url": "https://github.com/Aaqu"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

@@ -1,0 +1,653 @@
+/* ============================================================
+   Portal Code Workspace — sidebar tab + full-screen overlay.
+   Palette follows Monaco's vs-dark so the editor pane and the
+   surrounding chrome read as one surface.
+   ============================================================ */
+
+:root {
+  --fc-ws-bg: #1e1e1e;
+  --fc-ws-panel: #252526;
+  --fc-ws-bar: #333333;
+  --fc-ws-border: #3c3c3c;
+  --fc-ws-fg: #cccccc;
+  --fc-ws-fg-dim: #8a8a8a;
+  --fc-ws-accent: #0e639c;
+  --fc-ws-hover: #2a2d2e;
+  --fc-ws-selected: #04395e;
+  --fc-ws-dirty: #e2c08d;
+  --fc-ws-error: #f14c4c;
+}
+
+/* ── Brand font ──────────────────────────────────────────── */
+/* Ark Pixel 10px proportional, latin subset (SIL OFL 1.1, TakWolf) — see
+   THIRD-PARTY-NOTICES.md. A 10px design on a 1000-unit em, so it only lands on
+   whole pixels at multiples of 10px; anything else blurs the very pixel grid
+   the face is drawn on. */
+
+@font-face {
+  font-family: "Ark Pixel";
+  src: url("ark-pixel.woff2") format("woff2");
+  font-weight: normal;
+  font-style: normal;
+  font-display: swap;
+}
+
+/* ── Status bar button (bottom bar, one click into the editor) ── */
+/* Node-RED's own .red-ui-footer-button does the pill; only the icon needs us. */
+
+/* Node-RED sizes footer buttons for an icon alone; this one carries a label,
+   and its height is left to Node-RED so it sits level with its neighbours. */
+.fc-ws-statusbar-btn.red-ui-footer-button,
+button.fc-ws-statusbar-btn.red-ui-footer-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  width: auto;
+}
+
+/* `.red-ui-editor img` sets height:auto and outranks a bare class selector. */
+.red-ui-editor img.fc-ws-statusbar-icon,
+img.fc-ws-statusbar-icon {
+  height: 16px;
+  width: auto;
+  display: block;
+}
+
+/* ── Brand lockup (mark + fromcubes-react) ───────────────── */
+
+.fc-ws-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* The mark keeps its own black on a white tile rather than being inverted into
+   the header — same lockup as everywhere else the logo appears. */
+.red-ui-editor img.fc-ws-mark-logo,
+img.fc-ws-mark-logo {
+  height: 22px;
+  width: 22px;
+  padding: 2px;
+  box-sizing: border-box;
+  background: #ffffff;
+  border-radius: 5px;
+}
+
+.fc-ws-brand-text {
+  display: inline-flex;
+  align-items: baseline;
+  /* 20px = two font pixels per screen pixel; sits right in a 38px header. */
+  font-family: "Ark Pixel", "Cascadia Code", Consolas, monospace;
+  font-size: 20px;
+  line-height: 1;
+  /* Pixel faces must not be smoothed — that is the whole point of them. */
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+.fc-ws-brand-name {
+  color: #f2f2f2;
+}
+
+.fc-ws-brand-accent {
+  color: #f5a623;
+}
+
+/* ── Node-RED's own toasts ───────────────────────────────── */
+/* The overlay sits at 2000; #red-ui-notifications sits at 100 inside
+   #red-ui-editor, whose z-index is auto — so nothing between them makes a
+   stacking context and the toasts are simply buried. That silences Node-RED's
+   "Successfully deployed" and every warning this editor raises. Lifted only
+   while the overlay is open, so the rest of Node-RED — and other plugins'
+   overlays — keep their own stacking. */
+body.fc-ws-open #red-ui-notifications {
+  z-index: 2001;
+}
+
+/* ── Overlay shell ───────────────────────────────────────── */
+
+#fc-ws-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  display: flex;
+  flex-direction: column;
+  background: var(--fc-ws-bg);
+  color: var(--fc-ws-fg);
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+#fc-ws-overlay[hidden] {
+  display: none;
+}
+
+.fc-ws-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  height: 38px;
+  flex: 0 0 38px;
+  padding: 0 10px;
+  background: var(--fc-ws-bar);
+  border-bottom: 1px solid var(--fc-ws-border);
+}
+
+/* Node-RED's own button markup sits on our dark header — Node-RED styles it
+   for the light header toolbar, so restate the parts that don't carry over. */
+#fc-ws-overlay .red-ui-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 26px;
+  padding: 0 10px;
+  border: 1px solid var(--fc-ws-border);
+  border-radius: 4px;
+  background: transparent;
+  /* Node-RED sets this colour with !important, for its own light chrome — on
+     the dark header #646464 lands at ~1.9:1 against #333 and reads as a
+     disabled button, so the override has to shout back. */
+  color: var(--fc-ws-fg) !important;
+  font-size: 12px;
+  line-height: 24px;
+  text-decoration: none;
+}
+
+#fc-ws-overlay .red-ui-button:hover {
+  background: var(--fc-ws-hover);
+  border-color: #6e6e6e;
+  color: #ffffff !important;
+}
+
+#fc-ws-overlay .red-ui-deploy-button {
+  display: inline-flex;
+  align-items: center;
+  height: 26px;
+  padding: 0 12px;
+  border: none;
+  border-radius: 4px;
+  background: var(--red-ui-deploy-button-background, #ad1625);
+  color: #fff;
+  font-size: 12px;
+  text-decoration: none;
+}
+
+#fc-ws-overlay .red-ui-deploy-button:hover {
+  background: var(--red-ui-deploy-button-background-hover, #c62035);
+  color: #fff;
+}
+
+#fc-ws-overlay .red-ui-deploy-button.disabled {
+  opacity: 0.45;
+  pointer-events: none;
+}
+
+#fc-ws-overlay .red-ui-deploy-button-content {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+#fc-ws-overlay .red-ui-deploy-button img {
+  height: 14px;
+  width: auto;
+}
+
+/* Icon-only, so it needs no text padding. */
+#fc-ws-overlay .fc-ws-open-portal {
+  padding: 0 8px;
+}
+
+#fc-ws-overlay .fc-ws-kbd {
+  opacity: 0.55;
+  font-size: 10px;
+  margin-left: 3px;
+}
+
+.fc-ws-status {
+  color: var(--fc-ws-fg-dim);
+  font-size: 12px;
+}
+
+.fc-ws-status.fc-ws-has-changes {
+  color: var(--fc-ws-dirty);
+}
+
+.fc-ws-spacer {
+  flex: 1;
+}
+
+.fc-ws-btn {
+  background: transparent;
+  color: var(--fc-ws-fg);
+  border: 1px solid var(--fc-ws-border);
+  border-radius: 3px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+}
+
+.fc-ws-btn:hover {
+  background: var(--fc-ws-hover);
+}
+
+.fc-ws-btn-primary {
+  background: var(--fc-ws-accent);
+  border-color: var(--fc-ws-accent);
+  color: #fff;
+}
+
+.fc-ws-btn-primary:hover {
+  background: #1177bb;
+}
+
+.fc-ws-btn-primary:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+
+.fc-ws-body {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+}
+
+/* ── Tree pane ───────────────────────────────────────────── */
+
+/* The tree pane hosts the settings popover. */
+.fc-ws-tree-pane {
+  position: relative;
+  width: 260px;
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  min-width: 150px;
+  background: var(--fc-ws-panel);
+  border-right: 1px solid var(--fc-ws-border);
+}
+
+.fc-ws-filter-row {
+  padding: 6px;
+  border-bottom: 1px solid var(--fc-ws-border);
+  display: flex;
+  gap: 6px;
+  align-items: center;
+}
+
+.fc-ws-filter {
+  flex: 1;
+  min-width: 0;
+  background: #3c3c3c;
+  border: 1px solid #3c3c3c;
+  color: var(--fc-ws-fg);
+  border-radius: 2px;
+  padding: 3px 6px;
+  font-size: 12px;
+}
+
+.fc-ws-filter:focus {
+  outline: 1px solid var(--fc-ws-accent);
+}
+
+.fc-ws-toggle {
+  color: var(--fc-ws-fg-dim);
+  cursor: pointer;
+  padding: 2px 4px;
+  border-radius: 2px;
+}
+
+.fc-ws-toggle:hover {
+  color: var(--fc-ws-fg);
+  background: var(--fc-ws-hover);
+}
+
+.fc-ws-toggle.fc-ws-on {
+  color: #4ec9b0;
+  background: var(--fc-ws-hover);
+}
+
+/* ── Settings popover ────────────────────────────────────── */
+
+.fc-ws-settings {
+  position: absolute;
+  top: 36px;
+  right: 6px;
+  z-index: 5;
+  min-width: 190px;
+  padding: 6px 0;
+  background: var(--fc-ws-bar);
+  border: 1px solid var(--fc-ws-border);
+  border-radius: 4px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45);
+}
+
+.fc-ws-settings-title {
+  padding: 4px 10px 2px;
+  font-size: 10px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--fc-ws-fg-dim);
+}
+
+.fc-ws-settings-title:not(:first-child) {
+  margin-top: 4px;
+  border-top: 1px solid var(--fc-ws-border);
+  padding-top: 8px;
+}
+
+.fc-ws-settings-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 10px;
+  cursor: pointer;
+  font-size: 12px;
+  color: var(--fc-ws-fg);
+  margin: 0;
+}
+
+.fc-ws-settings-row:hover {
+  background: var(--fc-ws-hover);
+}
+
+.fc-ws-settings-row input {
+  margin: 0;
+  accent-color: #4ec9b0;
+  cursor: pointer;
+}
+
+.fc-ws-tree {
+  flex: 1;
+  overflow: auto;
+  padding: 4px 0 12px;
+  user-select: none;
+}
+
+.fc-ws-row {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  cursor: pointer;
+  white-space: nowrap;
+  line-height: 20px;
+}
+
+.fc-ws-row:hover {
+  background: var(--fc-ws-hover);
+}
+
+.fc-ws-row.fc-ws-active {
+  background: var(--fc-ws-selected);
+}
+
+/* ── File icons (Lucide sprite) ──────────────────────────── */
+/* Same shapes as the node badges on the canvas, so a portal reads as a portal
+   in both places. Colour marks the file's role — never its state: amber and
+   red already mean "changed" and "syntax error" on the markers to the right. */
+
+.fc-ws-row .fc-ws-icon {
+  width: 14px;
+  height: 14px;
+  flex: 0 0 auto;
+  color: var(--fc-ws-fg-dim);
+  /* Lucide is drawn for 24px; at 14 the hairline needs a touch more weight.
+     CSS wins over the sprite's stroke-width presentation attribute. */
+  stroke-width: 2.25;
+}
+
+/* Scoped to the row so these beat the base `.fc-ws-row .fc-ws-icon` colour. */
+.fc-ws-row .fc-ws-icon--portal {
+  color: #61dafb;
+}
+
+.fc-ws-row .fc-ws-icon--component {
+  color: #c586c0;
+}
+
+.fc-ws-row .fc-ws-icon--utility {
+  color: #4ec9b0;
+}
+
+.fc-ws-row .fc-ws-icon--head {
+  color: #e34c26;
+}
+
+/* Disabled in Node-RED — the node itself, or the flow tab carrying it. */
+.fc-ws-row.fc-ws-off .fc-ws-name {
+  opacity: 0.45;
+}
+
+.fc-ws-row.fc-ws-off .fc-ws-icon:not(.fc-ws-off-mark) {
+  opacity: 0.4;
+}
+
+.fc-ws-row .fc-ws-off-mark {
+  margin-left: auto;
+  padding-left: 6px;
+  width: 11px;
+  height: 11px;
+  color: var(--fc-ws-fg-dim);
+  opacity: 0.8;
+}
+
+/* The portal twisty sits ahead of the file icon and takes its own clicks. */
+.fc-ws-row .fc-ws-twisty {
+  width: 10px;
+  height: 10px;
+  margin-right: -1px;
+  font-size: 11px;
+  opacity: 0.7;
+  stroke-width: 3;
+}
+
+.fc-ws-row .fc-ws-twisty:hover {
+  opacity: 1;
+  color: var(--fc-ws-fg);
+}
+
+.fc-ws-row i {
+  width: 13px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--fc-ws-fg-dim);
+  flex: 0 0 auto;
+}
+
+.fc-ws-row .fc-ws-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.fc-ws-row.fc-ws-dir > .fc-ws-name {
+  font-weight: 600;
+  color: #d7d7d7;
+}
+
+.fc-ws-mark {
+  margin-left: auto;
+  padding-left: 6px;
+  font-size: 10px;
+  flex: 0 0 auto;
+}
+
+.fc-ws-mark.fc-ws-dirty {
+  color: var(--fc-ws-dirty);
+}
+
+.fc-ws-mark.fc-ws-error {
+  color: var(--fc-ws-error);
+}
+
+.fc-ws-empty {
+  padding: 12px;
+  color: var(--fc-ws-fg-dim);
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.fc-ws-splitter {
+  flex: 0 0 4px;
+  cursor: col-resize;
+  background: var(--fc-ws-border);
+}
+
+.fc-ws-splitter:hover {
+  background: var(--fc-ws-accent);
+}
+
+/* ── Scrollbars ──────────────────────────────────────────── */
+/* Node-RED's editor is light; these panes are not, and the platform scrollbar
+   would land as a bright slab in the middle of them. */
+
+#fc-ws-overlay * {
+  scrollbar-width: thin;
+  scrollbar-color: #4b4b4b transparent;
+}
+
+#fc-ws-overlay ::-webkit-scrollbar {
+  width: 11px;
+  height: 11px;
+}
+
+#fc-ws-overlay ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+#fc-ws-overlay ::-webkit-scrollbar-thumb {
+  background: #4b4b4b;
+  border-radius: 6px;
+  /* Transparent border keeps the thumb off the pane edge without a track. */
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+#fc-ws-overlay ::-webkit-scrollbar-thumb:hover {
+  background: #5f5f5f;
+  background-clip: padding-box;
+}
+
+#fc-ws-overlay ::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ── Editor pane ─────────────────────────────────────────── */
+
+.fc-ws-editor-pane {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.fc-ws-tabs {
+  display: flex;
+  flex: 0 0 auto;
+  overflow-x: auto;
+  background: var(--fc-ws-panel);
+  border-bottom: 1px solid var(--fc-ws-border);
+}
+
+.fc-ws-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 6px 12px;
+  border-right: 1px solid var(--fc-ws-border);
+  cursor: pointer;
+  white-space: nowrap;
+  color: var(--fc-ws-fg-dim);
+  font-size: 12px;
+}
+
+.fc-ws-tab.fc-ws-active {
+  background: var(--fc-ws-bg);
+  color: #fff;
+  box-shadow: inset 0 1px 0 0 var(--fc-ws-accent);
+}
+
+.fc-ws-tab .fc-ws-close {
+  width: 14px;
+  text-align: center;
+  border-radius: 2px;
+  opacity: 0.6;
+}
+
+.fc-ws-tab .fc-ws-close:hover {
+  background: #4b4b4b;
+  opacity: 1;
+}
+
+.fc-ws-tab.fc-ws-tab-dirty .fc-ws-close::before {
+  content: "\25CF";
+  color: var(--fc-ws-dirty);
+}
+
+.fc-ws-tab.fc-ws-tab-dirty:hover .fc-ws-close::before {
+  content: "\00D7";
+  color: inherit;
+}
+
+.fc-ws-monaco {
+  flex: 1;
+  min-height: 0;
+}
+
+.fc-ws-fallback {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  box-sizing: border-box;
+  background: var(--fc-ws-bg);
+  color: var(--fc-ws-fg);
+  border: 0;
+  padding: 8px;
+  font-family: "Cascadia Code", "Fira Code", Consolas, monospace;
+  font-size: 13px;
+  resize: none;
+}
+
+.fc-ws-placeholder {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--fc-ws-fg-dim);
+  font-size: 13px;
+  text-align: center;
+  line-height: 1.7;
+}
+
+.fc-ws-placeholder kbd {
+  background: var(--fc-ws-bar);
+  border: 1px solid var(--fc-ws-border);
+  border-radius: 3px;
+  padding: 1px 5px;
+  font-size: 11px;
+}
+
+/* ── Settings → Fromcubes (provider-settings.js) ─────────────────
+   Lives in Node-RED's own Settings tray, not in the overlay, so it uses
+   Node-RED's theme variables instead of the vs-dark palette above. */
+.fc-ps .fc-ps-section { margin-bottom: 24px; }
+.fc-ps .fc-ps-hint { color: var(--red-ui-secondary-text-color); margin: 0 0 8px; }
+.fc-ps .fc-ps-note,
+.fc-ps .fc-ps-warn { margin: 0 0 8px; }
+.fc-ps .fc-ps-warn { color: var(--red-ui-text-color-error); }
+.fc-ps .fc-ps-row { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; }
+.fc-ps .fc-ps-row input[type="radio"] { margin: 3px 0 0; flex: none; width: auto; }
+.fc-ps .fc-ps-row label { width: auto; margin: 0; cursor: pointer; }
+.fc-ps .fc-ps-row input:disabled + label { cursor: default; opacity: 0.6; }
+.fc-ps .fc-ps-id { font-family: var(--red-ui-monospace-font); font-weight: bold; }
+.fc-ps .fc-ps-module {
+  margin-left: 8px;
+  padding: 0 5px;
+  border: 1px solid var(--red-ui-secondary-border-color);
+  border-radius: 3px;
+  font-size: 11px;
+  color: var(--red-ui-secondary-text-color);
+}
+.fc-ps .fc-ps-label,
+.fc-ps .fc-ps-problem { display: block; font-size: 12px; color: var(--red-ui-secondary-text-color); }
+.fc-ps .fc-ps-problem { color: var(--red-ui-text-color-error); }

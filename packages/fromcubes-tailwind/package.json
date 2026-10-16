@@ -1,0 +1,55 @@
+{
+  "name": "@aaqu/fromcubes-tailwind",
+  "version": "0.1.0",
+  "description": "Fromcubes CSS engine: Tailwind CSS 4 generated server-side, with editor class completion",
+  "type": "commonjs",
+  "keywords": [
+    "node-red",
+    "fromcubes",
+    "tailwind",
+    "css"
+  ],
+  "node-red": {
+    "version": ">=4.0.0",
+    "plugins": {
+      "fromcubes-tailwind": "tailwind.js"
+    }
+  },
+  "files": [
+    "tailwind.js",
+    "css.js",
+    "candidates.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.5"
+  },
+  "dependencies": {
+    "tailwindcss": "^4.3.3"
+  },
+  "peerDependencies": {
+    "@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aaqu/fromcubes-modules.git",
+    "directory": "packages/fromcubes-tailwind"
+  },
+  "bugs": {
+    "url": "https://github.com/Aaqu/fromcubes-modules/issues"
+  },
+  "homepage": "https://aaqu.github.io/fromcubes-modules/",
+  "funding": {
+    "type": "ko-fi",
+    "url": "https://ko-fi.com/L4L01UOFRG"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Aaqu",
+    "url": "https://github.com/Aaqu"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

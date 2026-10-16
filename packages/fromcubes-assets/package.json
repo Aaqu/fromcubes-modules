@@ -1,0 +1,53 @@
+{
+  "name": "@aaqu/fromcubes-assets",
+  "version": "0.1.0",
+  "description": "Fromcubes Assets: static files for portals, managed from a Node-RED sidebar",
+  "type": "commonjs",
+  "keywords": [
+    "node-red",
+    "fromcubes",
+    "assets",
+    "static",
+    "files"
+  ],
+  "node-red": {
+    "version": ">=4.0.0",
+    "plugins": {
+      "fromcubes-assets": "fromcubes-assets.js"
+    }
+  },
+  "files": [
+    "fromcubes-assets.js",
+    "fromcubes-assets.html",
+    "assets.js",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18.5"
+  },
+  "peerDependencies": {
+    "@aaqu/fromcubes-react": ">=0.1.0 <1.0.0"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Aaqu/fromcubes-modules.git",
+    "directory": "packages/fromcubes-assets"
+  },
+  "bugs": {
+    "url": "https://github.com/Aaqu/fromcubes-modules/issues"
+  },
+  "homepage": "https://aaqu.github.io/fromcubes-modules/",
+  "funding": {
+    "type": "ko-fi",
+    "url": "https://ko-fi.com/L4L01UOFRG"
+  },
+  "license": "Apache-2.0",
+  "author": {
+    "name": "Aaqu",
+    "url": "https://github.com/Aaqu"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}
