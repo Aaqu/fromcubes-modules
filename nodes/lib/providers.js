@@ -15,6 +15,7 @@
  *     type: "fromcubes-portal-css",
  *     apiVersion: 1,
  *     generate(source) { return { css } },
+ *     editor: { classes() { return ["p-4", …] } },   // optional: completion
  *   })
  *
  * The built-in providers (`headers` and `none` for identity, `tailwind` and
@@ -54,6 +55,11 @@ const DEFAULT_CSS = "tailwind";
 const MAX_USER_STRING = 8192;
 const MAX_GROUPS = 4096;
 const IDENTITY_TIMEOUT_MS = 5000;
+// Completion list sent to the editor. Tailwind's own list is a few thousand
+// entries; the caps only stop a plugin from shipping something absurd to
+// every editor that opens a dialog.
+const MAX_EDITOR_CLASSES = 50000;
+const MAX_EDITOR_CLASS_LEN = 200;
 
 const USER_STRING_FIELDS = ["login", "displayName", "email", "role"];
 
@@ -117,7 +123,7 @@ function sanitizeUser(raw) {
  * Built-in providers. `helpers` supplies the actual implementations so this
  * module stays free of tailwind/header specifics.
  *
- * @param {{ extractPortalUser: Function, generateCSS: Function }} helpers
+ * @param {{ extractPortalUser: Function, generateCSS: Function, tailwindClasses?: Function }} helpers
  * @returns {{ identity: Object<string,Object>, css: Object<string,Object> }}
  */
 function builtinProviders(helpers) {
@@ -148,6 +154,9 @@ function builtinProviders(helpers) {
           const { css } = await helpers.generateCSS(source);
           return { css };
         },
+        editor: {
+          classes: () => (helpers.tailwindClasses ? helpers.tailwindClasses() : []),
+        },
       },
       none: {
         id: "none",
@@ -175,6 +184,7 @@ function builtinProviders(helpers) {
  *   cssEngineId: function(): string,
  *   describe: function(): Object,
  *   select: function(string, string): boolean,
+ *   editorClasses: function(): Promise<{engine: string, classes: Array<string>}>,
  * }}
  */
 function createProviders(RED, helpers, opts = {}) {
@@ -187,6 +197,9 @@ function createProviders(RED, helpers, opts = {}) {
   const logged = new Set();
   /** @type {{identity?: string, css?: string}} */
   const chosen = loadChoice();
+  // provider object → its validated class list. Keyed by the object, not the
+  // id, so a plugin reinstalled at runtime (a new definition) is asked again.
+  const classCache = new WeakMap();
 
   /**
    * Log a configuration problem once per process — these are evaluated per
@@ -467,7 +480,45 @@ function createProviders(RED, helpers, opts = {}) {
     return { css: out.css };
   }
 
-  return { resolveUser, generateCss, identityId, cssEngineId, describe, select };
+  /**
+   * Class names the editor offers inside `className="…"` for the engine in
+   * force. Optional for plugins (`editor.classes()`); an engine without it,
+   * an unusable engine, or one that fails yields an empty list — completion
+   * just stays quiet, nothing else depends on it.
+   *
+   * @returns {Promise<{engine: string, classes: Array<string>}>}
+   */
+  async function editorClasses() {
+    const engine = cssEngineId();
+    const { provider } = lookup(CSS_TYPE, builtins.css, engine);
+    const fn = provider && provider.editor && provider.editor.classes;
+    if (typeof fn !== "function") return { engine, classes: [] };
+    if (classCache.has(provider)) return { engine, classes: classCache.get(provider) };
+    let raw;
+    try {
+      raw = await fn.call(provider.editor);
+    } catch (e) {
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.classes() failed: ${e.message}`);
+      return { engine, classes: [] };
+    }
+    const classes = [];
+    if (Array.isArray(raw)) {
+      const seen = new Set();
+      for (const c of raw) {
+        if (classes.length >= MAX_EDITOR_CLASSES) break;
+        if (typeof c !== "string" || !c || c.length > MAX_EDITOR_CLASS_LEN || /\s/.test(c)) continue;
+        if (seen.has(c)) continue;
+        seen.add(c);
+        classes.push(c);
+      }
+    } else {
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.classes() did not return an array`);
+    }
+    classCache.set(provider, classes);
+    return { engine, classes };
+  }
+
+  return { resolveUser, generateCss, identityId, cssEngineId, describe, select, editorClasses };
 }
 
 module.exports = {
@@ -482,4 +533,5 @@ module.exports = {
   DEFAULT_CSS,
   MAX_USER_STRING,
   MAX_GROUPS,
+  MAX_EDITOR_CLASSES,
 };

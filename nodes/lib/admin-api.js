@@ -75,15 +75,6 @@ function registerAdminApi(RED, deps) {
     express.static(path.dirname(require.resolve("prettier/package.json"))),
   );
 
-  const { generateCandidates } = require("../tw-candidates");
-  let twClassesCache = null;
-  RED.httpAdmin.get("/portal-react/tw-classes", permRead, (_req, res) => {
-    if (!twClassesCache) {
-      twClassesCache = generateCandidates();
-    }
-    res.json(twClassesCache);
-  });
-
   const CSS_HASH_RE = /^[a-f0-9]{1,64}$/;
   function findCssByHash(reqHash) {
     for (const ep in pageState) {
@@ -207,6 +198,17 @@ function registerProviderRoutes(RED, deps) {
 
   RED.httpAdmin.get("/portal-react/providers", permRead, (_req, res) => {
     res.json(providers.describe());
+  });
+
+  // Completion list for className="…", from whichever CSS engine is in force.
+  // `engine` lets the editor tell a stale list from a fresh one.
+  RED.httpAdmin.get("/portal-react/css-classes", permRead, async (_req, res) => {
+    try {
+      res.json(await providers.editorClasses());
+    } catch (e) {
+      RED.log.error("[portal-react] css-classes: " + e.message);
+      res.status(500).json({ error: "could not list classes" });
+    }
   });
 
   RED.httpAdmin.put(

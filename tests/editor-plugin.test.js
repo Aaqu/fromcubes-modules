@@ -419,3 +419,26 @@ test("portal page reloads on the server's identity-change frame", () => {
   const html = buildPage("T", "", "/fromcubes/x/_ws", "", "", null, false, "");
   expect(html).toMatch(/m\.type === 'reload'\)\s*\{\s*(\/\/[^\n]*\n\s*)*location\.reload\(\)/);
 });
+
+test("className completion loads from the engine-aware endpoint everywhere", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
+  const ws = fs.readFileSync(path.join(__dirname, "..", "nodes", "editor", "workspace.js"), "utf8");
+  const pane = fs.readFileSync(path.join(__dirname, "..", "nodes", "editor", "provider-settings.js"), "utf8");
+  for (const src of [html, ws]) {
+    expect(src).not.toContain("tw-classes");
+    expect(src).not.toContain("__fcTwClasses");
+  }
+  expect(html).toContain('$.getJSON("portal-react/css-classes"');
+  // portal, component and utility dialogs each refresh on open
+  expect(html.match(/window\.__fcRefreshCssClasses\(\);/g)).toHaveLength(3);
+  expect(ws).toContain("window.__fcRefreshCssClasses()");
+  expect(pane).toContain("window.__fcRefreshCssClasses()");
+});
+
+test("tailwind candidate list is non-trivial and unique", () => {
+  const { generateCandidates } = require("../nodes/tw-candidates");
+  const list = generateCandidates();
+  expect(list.length).toBeGreaterThan(1000);
+  expect(new Set(list).size).toBe(list.length);
+  expect(list).toContain("p-4");
+});

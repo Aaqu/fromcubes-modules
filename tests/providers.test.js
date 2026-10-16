@@ -542,3 +542,80 @@ describe("describe()", () => {
     expect(d.identity.options.at(-1)).toMatchObject({ id: "sso", missing: true });
   });
 });
+
+// ── editorClasses(): completion list for className="…" ──
+
+describe("editorClasses()", () => {
+  const helpersWithTw = {
+    ...fakeHelpers,
+    tailwindClasses: vi.fn(() => ["p-4", "m-2"]),
+  };
+  const makeTw = (opts) => {
+    const RED = fakeRED(opts);
+    return { RED, p: createProviders(RED, helpersWithTw) };
+  };
+
+  it("tailwind: the candidate list, computed once", async () => {
+    helpersWithTw.tailwindClasses.mockClear();
+    const { p } = makeTw();
+    expect(await p.editorClasses()).toEqual({ engine: "tailwind", classes: ["p-4", "m-2"] });
+    await p.editorClasses();
+    expect(helpersWithTw.tailwindClasses).toHaveBeenCalledTimes(1);
+  });
+
+  it("none, unknown engine, or a plugin without editor: empty list", async () => {
+    const plain = cssPlugin("plain", () => ({ css: "" }));
+    for (const cssEngine of ["none", "ghost", "plain"]) {
+      const { p } = makeTw({ plugins: [plain], settings: { cssEngine } });
+      expect(await p.editorClasses()).toEqual({ engine: cssEngine, classes: [] });
+    }
+  });
+
+  it("follows the engine chosen at runtime", async () => {
+    const uno = cssPlugin("uno", () => ({ css: "" }), {
+      editor: { classes: async () => ["uno-a"] },
+    });
+    const { p } = makeTw({ plugins: [uno] });
+    expect((await p.editorClasses()).classes).toEqual(["p-4", "m-2"]);
+    p.select("css", "uno");
+    expect(await p.editorClasses()).toEqual({ engine: "uno", classes: ["uno-a"] });
+    p.select("css", "none");
+    expect((await p.editorClasses()).classes).toEqual([]);
+  });
+
+  it("filters plugin output: strings only, no blanks/whitespace/overlong, de-duplicated", async () => {
+    const uno = cssPlugin("uno", () => ({ css: "" }), {
+      editor: { classes: () => ["a", "a", "", 5, null, "has space", "x".repeat(201), "y".repeat(200), "b"] },
+    });
+    const { p } = makeTw({ plugins: [uno], settings: { cssEngine: "uno" } });
+    expect((await p.editorClasses()).classes).toEqual(["a", "y".repeat(200), "b"]);
+  });
+
+  it("caps the list length", async () => {
+    const { MAX_EDITOR_CLASSES } = require("../nodes/lib/providers");
+    const many = Array.from({ length: MAX_EDITOR_CLASSES + 10 }, (_, i) => "c" + i);
+    const uno = cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => many } });
+    const { p } = makeTw({ plugins: [uno], settings: { cssEngine: "uno" } });
+    expect((await p.editorClasses()).classes).toHaveLength(MAX_EDITOR_CLASSES);
+  });
+
+  it("throw or non-array ⇒ empty list + warn, never a rejection", async () => {
+    const boom = cssPlugin("boom", () => ({ css: "" }), {
+      editor: { classes: () => { throw new Error("nope"); } },
+    });
+    const odd = cssPlugin("odd", () => ({ css: "" }), { editor: { classes: () => "p-4 m-2" } });
+    for (const id of ["boom", "odd"]) {
+      const { p, RED } = makeTw({ plugins: [boom, odd], settings: { cssEngine: id } });
+      expect((await p.editorClasses()).classes).toEqual([]);
+      expect(RED._logs.warn[0]).toMatch(new RegExp(`"${id}" editor\\.classes\\(\\)`));
+    }
+  });
+
+  it("a reinstalled plugin (new definition) is asked again", async () => {
+    const plugins = [cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => ["v1"] } })];
+    const { p } = makeTw({ plugins, settings: { cssEngine: "uno" } });
+    expect((await p.editorClasses()).classes).toEqual(["v1"]);
+    plugins[0] = cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => ["v2"] } });
+    expect((await p.editorClasses()).classes).toEqual(["v2"]);
+  });
+});

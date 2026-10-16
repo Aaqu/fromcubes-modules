@@ -125,6 +125,10 @@
         .done(function (data) {
           RED.notify(def.title + ": " + id, "success");
           render(data);
+          // className completion follows the engine (portal-react.html).
+          if (def.kind === "css" && window.__fcRefreshCssClasses) {
+            window.__fcRefreshCssClasses();
+          }
         })
         .fail(function (xhr) {
           RED.notify(def.title + " not changed: " + errorText(xhr), "error");

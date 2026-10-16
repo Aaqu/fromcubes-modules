@@ -255,6 +255,9 @@ module.exports = function (RED) {
     async generate(source) {          // the portal's full source, components included
       return { css: await compileMyCss(source) };
     },
+    editor: {                         // optional: className="…" completion
+      classes() { return ["card", "btn", "btn-primary"]; },
+    },
   });
 };
 ```
@@ -281,6 +284,10 @@ portalReact: {
   throw, a rejection or 5 s without an answer means anonymous.
 - `generate` returns `{ css }`. A failure shows the yellow `css-fail` status
   and the page is served unstyled.
+- `editor.classes()` (optional, may be async) feeds the class completion in
+  every code editor; it is asked once per installed plugin. Without it the
+  engine just gets no completion. Strings only, no whitespace, ≤ 200 chars,
+  at most 50 000.
 - An unknown provider name is logged once; for identity every session is then
   anonymous. The settings pane flags a selected provider whose package is gone.
 - Optional `label: "…"` on the plugin is shown next to its id in the settings

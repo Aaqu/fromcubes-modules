@@ -520,7 +520,10 @@ module.exports = function (RED) {
     deleteCacheFiles,
     isHashInUse,
   } = helpers;
-  const providers = require("./lib/providers").createProviders(RED, helpers, {
+  const providers = require("./lib/providers").createProviders(RED, {
+    ...helpers,
+    tailwindClasses: require("./tw-candidates").generateCandidates,
+  }, {
     storeFile: require("path").join(userDir, "fromcubes", "providers.json"),
   });
 

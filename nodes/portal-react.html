@@ -29,12 +29,35 @@
       quickSuggestions: { strings: true },
     };
 
-    window.__fcTwClasses = null;
+    // className="…" completion list, from the CSS engine in force (Settings →
+    // Fromcubes). Refetched every time a dialog or the React Editor opens and
+    // after the engine changes — the engine can change while the editor is
+    // open, so "load once" would keep offering the old engine's classes.
+    window.__fcCssClasses = null;
+    window.__fcCssClassSet = null;
+    window.__fcCssEngine = null;
+    let cssClassesPending = false;
+    window.__fcRefreshCssClasses = function () {
+      if (cssClassesPending) return;
+      cssClassesPending = true;
+      $.getJSON("portal-react/css-classes", function (data) {
+        if (!data || !Array.isArray(data.classes)) return;
+        window.__fcCssEngine = data.engine;
+        window.__fcCssClasses = data.classes;
+        window.__fcCssClassSet = null;
+      })
+        .fail(function (xhr) {
+          console.error("[FC-Monaco] css-classes FAILED:", xhr.status, xhr.statusText);
+        })
+        .always(function () {
+          cssClassesPending = false;
+        });
+    };
     let jsxSetupDone = false;
 
     /**
      * One-time Monaco setup: compiler opts, diagnostics, extra libs,
-     * completion providers (Tailwind class, JSX tag, utility symbol).
+     * completion providers (CSS class — from the engine in force, JSX tag, utility symbol).
      * Idempotent — safe to call multiple times, only the first call wires
      * up listeners; subsequent calls just re-apply the compiler/diagnostics
      * blocks because Node-RED resets them whenever the editor reloads.
@@ -79,7 +102,7 @@
       console.log(PREFIX, "addExtraLib globals.d.ts");
       jsDef.addExtraLib(libContent, "file:///globals.d.ts");
 
-      // Tailwind className completion provider
+      // className completion provider — classes from the CSS engine in force
       // Triggers in: className="...", className={`...`}, and any string literal
       // containing at least one known TW class (e.g. "bg-red-500 text-white")
       console.log(PREFIX, "registering Tailwind completion provider");
@@ -114,12 +137,12 @@
           // For non-className strings, only activate if at least one existing
           // token in the string looks like a TW class (avoid noise in random strings)
           if (!isClassName && parts.length > 0) {
-            const classes = window.__fcTwClasses || [];
-            let twSet = window.__fcTwSet;
+            const classes = window.__fcCssClasses || [];
+            let twSet = window.__fcCssClassSet;
             if (!twSet && classes.length) {
               twSet = new Set(classes);
-              window.__fcTwSet = twSet;
-              console.log(PREFIX, "TW: built lookup Set, size=" + twSet.size);
+              window.__fcCssClassSet = twSet;
+              console.log(PREFIX, "CSS: built class lookup Set, size=" + twSet.size);
             }
             if (twSet) {
               let hasTwToken = false;
@@ -149,7 +172,7 @@
             endColumn: position.column,
           };
 
-          const classes = window.__fcTwClasses || [];
+          const classes = window.__fcCssClasses || [];
           const suggestions = [];
           for (let i = 0; i < classes.length; i++) {
             const cls = classes[i];
@@ -165,7 +188,7 @@
           }
           console.log(
             PREFIX,
-            "TW completion: ctx=" +
+            "CSS class completion: ctx=" +
               (isClassName ? "className" : "string") +
               " word='" +
               word +
@@ -1164,21 +1187,7 @@
           window.__fcPortalWorkspace.openNodeFile(node.id, "compCode");
         });
 
-        if (!window.__fcTwClasses) {
-          console.log("[FC-Monaco] loading tw-classes...");
-          $.getJSON("portal-react/tw-classes", function (classes) {
-            console.log(
-              "[FC-Monaco] tw-classes loaded, count=" + classes.length,
-            );
-            window.__fcTwClasses = classes;
-          }).fail(function (xhr) {
-            console.error(
-              "[FC-Monaco] tw-classes FAILED:",
-              xhr.status,
-              xhr.statusText,
-            );
-          });
-        }
+        window.__fcRefreshCssClasses();
 
         window.__fcLoadMonaco(function (failed) {
           if (failed) {
@@ -1478,11 +1487,7 @@
           window.__fcPortalWorkspace.openNodeFile(node.id, "utilCode");
         });
 
-        if (!window.__fcTwClasses) {
-          $.getJSON("portal-react/tw-classes", function (classes) {
-            window.__fcTwClasses = classes;
-          });
-        }
+        window.__fcRefreshCssClasses();
 
         window.__fcLoadMonaco(function (failed) {
           if (failed) {
@@ -1886,21 +1891,7 @@ function useDebounce(value, ms = 300) {
           window.__fcPortalWorkspace.openNodeFile(node.id, field);
         });
 
-        if (!window.__fcTwClasses) {
-          console.log("[FC-Monaco] loading tw-classes...");
-          $.getJSON("portal-react/tw-classes", function (classes) {
-            console.log(
-              "[FC-Monaco] tw-classes loaded, count=" + classes.length,
-            );
-            window.__fcTwClasses = classes;
-          }).fail(function (xhr) {
-            console.error(
-              "[FC-Monaco] tw-classes FAILED:",
-              xhr.status,
-              xhr.statusText,
-            );
-          });
-        }
+        window.__fcRefreshCssClasses();
 
         // Tabs
         const fcTabs = RED.tabs.create({

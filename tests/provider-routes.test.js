@@ -182,3 +182,22 @@ test("no providers dependency, no routes", async () => {
   const a = express().use(RED.httpAdmin);
   expect((await request(a).get("/portal-react/providers")).status).toBe(404);
 });
+
+test("GET /portal-react/css-classes lists the engine in force, behind read permission", async () => {
+  const providers = build();
+  let res = await request(app).get("/portal-react/css-classes");
+  expect(res.status).toBe(200);
+  // build() passes no tailwindClasses helper, so tailwind yields [] here;
+  // the real list is covered by the tw-candidates test.
+  expect(res.body).toEqual({ engine: "tailwind", classes: [] });
+  expect(gate.read).toContain("GET /portal-react/css-classes");
+
+  providers.select("css", "none");
+  res = await request(app).get("/portal-react/css-classes");
+  expect(res.body).toEqual({ engine: "none", classes: [] });
+});
+
+test("the old /portal-react/tw-classes route is gone", async () => {
+  build();
+  expect((await request(app).get("/portal-react/tw-classes")).status).toBe(404);
+});

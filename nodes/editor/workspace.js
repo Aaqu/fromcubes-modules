@@ -1299,17 +1299,12 @@
   }
 
   /**
-   * Load Tailwind candidates + component/utility names so completion inside
+   * Load CSS class candidates + component/utility names so completion inside
    * the overlay is as rich as inside a node dialog.
    * @returns {void}
    */
   function warmCompletionCaches() {
-    if (!window.__fcTwClasses) {
-      $.getJSON("portal-react/tw-classes", function (classes) {
-        window.__fcTwClasses = classes;
-        window.__fcTwSet = null;
-      });
-    }
+    if (window.__fcRefreshCssClasses) window.__fcRefreshCssClasses();
     if (window.__fcRefreshComponentNames) window.__fcRefreshComponentNames();
     if (window.__fcRefreshUtilities) window.__fcRefreshUtilities();
   }
