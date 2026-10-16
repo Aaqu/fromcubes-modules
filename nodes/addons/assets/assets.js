@@ -1,4 +1,4 @@
-/** @module nodes/lib/assets */
+/** @module nodes/addons/assets/assets */
 
 /**
  * Portal Assets — static file serving with security validation.
@@ -187,7 +187,7 @@ function authMiddleware(RED, scope) {
  * @fires RED.log#info on first-time directory creation
  *
  * @example
- *   const { registerAssets } = require("./lib/assets");
+ *   const { registerAssets } = require("./assets");
  *   registerAssets(RED, require("express"), path.join(userDir, "fromcubes", "public"));
  */
 function registerAssets(RED, express, assetsDir, opts) {

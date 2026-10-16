@@ -436,7 +436,7 @@ test("className completion loads from the engine-aware endpoint everywhere", () 
 });
 
 test("tailwind candidate list is non-trivial and unique", () => {
-  const { generateCandidates } = require("../nodes/tw-candidates");
+  const { generateCandidates } = require("../nodes/addons/tailwind/candidates");
   const list = generateCandidates();
   expect(list.length).toBeGreaterThan(1000);
   expect(new Set(list).size).toBe(list.length);

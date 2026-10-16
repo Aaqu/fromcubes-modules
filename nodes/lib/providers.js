@@ -18,17 +18,21 @@
  *     editor: { classes() { return ["p-4", …] } },   // optional: completion
  *   })
  *
- * The built-in providers (`headers` and `none` for identity, `tailwind` and
- * `none` for css) are defined with the same shape and pass through the same
- * validation, so the API is exercised by our own code on every request and
- * every build.
+ * The core builds in only `none` for each kind. Everything that does real
+ * work — `headers` (nodes/addons/auth-headers) and `tailwind`
+ * (nodes/addons/tailwind) — is a Node-RED plugin like any third-party one,
+ * found through RED.plugins and held to the same apiVersion and validation.
+ * Two plugins registering the same provider id of one type are ambiguous and
+ * neither is used.
  *
  * Selection is explicit, exactly one provider per kind, first match wins:
  *   1. `RED.settings.portalReact.identityProvider` / `.cssEngine` (settings.js)
  *      — the administrator's word; the editor shows it locked.
  *   2. The choice made in the editor (Settings → Fromcubes), persisted in
  *      `<userDir>/fromcubes/providers.json`.
- *   3. The defaults, `headers` and `tailwind`.
+ *   3. The defaults, `headers` and `tailwind` — names, not code: when their
+ *      add-on is not installed the default is simply missing (identity:
+ *      anonymous; css: unstyled), exactly like any other missing provider.
  * Installing a plugin never switches anything on its own — for identity that
  * would let a package change who counts as logged in.
  *
@@ -120,22 +124,15 @@ function sanitizeUser(raw) {
 }
 
 /**
- * Built-in providers. `helpers` supplies the actual implementations so this
- * module stays free of tailwind/header specifics.
+ * The only providers built into the core: one per kind that does nothing, so
+ * "no identity" and "no stylesheet" are always choosable. Their ids are
+ * reserved.
  *
- * @param {{ extractPortalUser: Function, generateCSS: Function, tailwindClasses?: Function }} helpers
  * @returns {{ identity: Object<string,Object>, css: Object<string,Object> }}
  */
-function builtinProviders(helpers) {
+function builtinProviders() {
   return {
     identity: {
-      headers: {
-        id: "headers",
-        type: IDENTITY_TYPE,
-        apiVersion: API_VERSION,
-        label: "x-portal-user-* headers from a reverse proxy",
-        resolveUser: (req) => helpers.extractPortalUser(req.headers || {}),
-      },
       none: {
         id: "none",
         type: IDENTITY_TYPE,
@@ -145,19 +142,6 @@ function builtinProviders(helpers) {
       },
     },
     css: {
-      tailwind: {
-        id: "tailwind",
-        type: CSS_TYPE,
-        apiVersion: API_VERSION,
-        label: "Tailwind CSS 4 utility classes",
-        generate: async (source) => {
-          const { css } = await helpers.generateCSS(source);
-          return { css };
-        },
-        editor: {
-          classes: () => (helpers.tailwindClasses ? helpers.tailwindClasses() : []),
-        },
-      },
       none: {
         id: "none",
         type: CSS_TYPE,
@@ -173,7 +157,6 @@ function builtinProviders(helpers) {
  * Create the provider registry bound to `RED`.
  *
  * @param {Object} RED
- * @param {{ extractPortalUser: Function, generateCSS: Function }} helpers
  * @param {{ identityTimeoutMs?: number, storeFile?: string }} [opts]
  *   `storeFile`: where the editor's choice is persisted; without it the
  *   choice lives in memory only (tests, embedded use).
@@ -187,10 +170,10 @@ function builtinProviders(helpers) {
  *   editorClasses: function(): Promise<{engine: string, classes: Array<string>}>,
  * }}
  */
-function createProviders(RED, helpers, opts = {}) {
+function createProviders(RED, opts = {}) {
   const fs = require("fs");
   const path = require("path");
-  const builtins = builtinProviders(helpers);
+  const builtins = builtinProviders();
   const tables = { identity: builtins.identity, css: builtins.css };
   const identityTimeoutMs = opts.identityTimeoutMs ?? IDENTITY_TIMEOUT_MS;
   const storeFile = opts.storeFile || null;
@@ -296,7 +279,10 @@ function createProviders(RED, helpers, opts = {}) {
 
   /**
    * Find the provider `id` of `type`: built-ins first (their ids are
-   * reserved), then plugins registered with Node-RED.
+   * reserved), then plugins registered with Node-RED. An id registered by
+   * more than one plugin is refused rather than resolved by load order — for
+   * identity, "whichever package loaded first" must never decide who is
+   * logged in.
    *
    * @param {string} type
    * @param {Object<string,Object>} table
@@ -315,10 +301,18 @@ function createProviders(RED, helpers, opts = {}) {
     if (Object.prototype.hasOwnProperty.call(table, id)) {
       return { provider: table[id], error: null };
     }
-    const found = plugins.find((p) => p && p.id === id);
-    if (!found) {
+    const matches = plugins.filter((p) => p && p.id === id);
+    if (matches.length === 0) {
       return { provider: null, error: `${type} provider "${id}" is not registered` };
     }
+    if (matches.length > 1) {
+      const mods = matches.map((p) => p.module || "?").join(", ");
+      return {
+        provider: null,
+        error: `${type} provider "${id}" is registered by more than one package (${mods})`,
+      };
+    }
+    const found = matches[0];
     if (found.apiVersion !== API_VERSION) {
       return {
         provider: null,
@@ -359,7 +353,10 @@ function createProviders(RED, helpers, opts = {}) {
         builtin: true,
       }));
       const seen = new Set(options.map((o) => o.id));
-      for (const p of pluginsOf(k.type)) {
+      const plugins = pluginsOf(k.type);
+      const count = {};
+      for (const p of plugins) count[p.id] = (count[p.id] || 0) + 1;
+      for (const p of plugins) {
         if (typeof p.id !== "string" || seen.has(p.id)) continue;
         seen.add(p.id);
         const opt = {
@@ -368,7 +365,9 @@ function createProviders(RED, helpers, opts = {}) {
           module: typeof p.module === "string" ? p.module : "",
           builtin: false,
         };
-        if (p.apiVersion !== API_VERSION) {
+        if (count[p.id] > 1) {
+          opt.problem = "registered by more than one package — neither is used";
+        } else if (p.apiVersion !== API_VERSION) {
           opt.problem = `apiVersion ${JSON.stringify(p.apiVersion)}, expected ${API_VERSION}`;
         } else if (!PROVIDER_ID_RE.test(p.id)) {
           opt.problem = "id cannot be selected (letters, digits, . _ - only)";

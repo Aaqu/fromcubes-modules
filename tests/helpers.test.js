@@ -8,7 +8,6 @@ const path = require("path");
 
 const {
   validateSubPath,
-  generateCSS,
   quickCheckSyntax,
   findMissingComponentRefs,
   stripComments,
@@ -20,6 +19,7 @@ const {
   shouldSkipInstall,
 } = require("../nodes/lib/helpers");
 const { extractUtilitySymbols } = require("../nodes/lib/registry-nodes");
+const { generateCSS } = require("../nodes/addons/tailwind/css");
 
 describe("validateSubPath", () => {
   it("accepts a simple single segment", () => {

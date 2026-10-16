@@ -1,9 +1,11 @@
 /**
  * Provider registry (lib/providers.js): identity providers and CSS engines.
  *
- * The built-ins go through the same lookup and validation as third-party
- * plugins, so these tests pin down both the public plugin contract and the
- * guarantee that, with no configuration, nothing changes for existing flows.
+ * The core builds in only `none`; `headers` and `tailwind` are add-on plugins
+ * found through RED.plugins like any third-party one. By default the fake
+ * RED below has both add-ons installed, as the package ships them, so these
+ * tests pin down the plugin contract AND that nothing changes for existing
+ * flows. `addons: false` is a core installed without them.
  */
 
 const {
@@ -15,14 +17,23 @@ const {
   MAX_USER_STRING,
   MAX_GROUPS,
 } = require("../nodes/lib/providers");
-const { extractPortalUser } = require("../nodes/lib/helpers");
+const { extractPortalUser } = require("../nodes/addons/auth-headers/headers");
 
-function fakeRED({ plugins = [], settings = {} } = {}) {
+// The add-ons as Node-RED registers them: registerPlugin(id, def) adds id
+// and module to the definition.
+const PKG = "@aaqu/fromcubes-portal-react";
+const ADDONS = [
+  { ...require("../nodes/addons/auth-headers/auth-headers").provider, id: "headers", module: PKG },
+  { ...require("../nodes/addons/tailwind/tailwind").provider, id: "tailwind", module: PKG },
+];
+
+function fakeRED({ plugins = [], settings = {}, addons = true } = {}) {
   const logs = { error: [], warn: [] };
   return {
     settings: { portalReact: settings },
     plugins: {
-      getByType: (type) => plugins.filter((p) => p.type === type),
+      // Read `plugins` on every call so tests can install/uninstall live.
+      getByType: (type) => [...(addons ? ADDONS : []), ...plugins].filter((p) => p.type === type),
     },
     log: {
       error: (m) => logs.error.push(m),
@@ -32,16 +43,9 @@ function fakeRED({ plugins = [], settings = {} } = {}) {
   };
 }
 
-// generateCSS stub: the real one is covered in helpers.test.js, and booting
-// tailwind here would only slow these tests down.
-const fakeHelpers = {
-  extractPortalUser,
-  generateCSS: async (source) => ({ css: "/*tw*/" + source, cssHash: "x" }),
-};
-
 function make(opts, providerOpts) {
   const RED = fakeRED(opts);
-  return { RED, p: createProviders(RED, fakeHelpers, providerOpts) };
+  return { RED, p: createProviders(RED, providerOpts) };
 }
 
 const identityPlugin = (id, resolveUser, extra = {}) => ({
@@ -74,7 +78,7 @@ describe("defaults", () => {
   it("falls back to defaults when RED.settings.portalReact is absent", async () => {
     const RED = fakeRED();
     delete RED.settings.portalReact;
-    const p = createProviders(RED, fakeHelpers);
+    const p = createProviders(RED);
     expect(p.identityId()).toBe("headers");
     expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toEqual({
       userId: "u1",
@@ -88,7 +92,7 @@ describe("defaults", () => {
     expect(p.cssEngineId()).toBe("tailwind");
   });
 
-  it("built-in header provider returns exactly what extractPortalUser returns", async () => {
+  it("headers add-on returns exactly what extractPortalUser returns", async () => {
     const { p } = make();
     const cases = [
       {},
@@ -112,9 +116,20 @@ describe("defaults", () => {
     }
   });
 
-  it("built-in tailwind engine passes the source to generateCSS", async () => {
+  it("tailwind add-on builds the utilities used in the source", async () => {
     const { p } = make();
-    expect(await p.generateCss("p-4")).toEqual({ css: "/*tw*/p-4" });
+    const { css } = await p.generateCss('<div className="p-4">');
+    expect(css).toMatch(/\.p-4\s*\{/);
+  });
+
+  it("without the add-ons the defaults are missing: anonymous and unstyled", async () => {
+    const { p, RED } = make({ addons: false });
+    expect(p.identityId()).toBe("headers");
+    expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
+    expect(RED._logs.error[0]).toMatch(/"headers" is not registered/);
+    await expect(p.generateCss("p-4")).rejects.toThrow(/"tailwind" is not registered/);
+    // `none` is always there — the core's own.
+    expect(p.select("identity", "none")).toBe(true);
   });
 
   it("built-in none engine emits empty css", async () => {
@@ -172,21 +187,27 @@ describe("selection", () => {
     expect(await p.resolveUser(req())).toEqual({ userId: "u9", groups: [] });
   });
 
-  it("built-in ids are reserved: a plugin cannot shadow them", async () => {
-    const shadow = identityPlugin("headers", () => ({ userId: "admin" }));
-    const { p, RED } = make({ plugins: [shadow] });
+  it("built-in ids are reserved: a plugin cannot shadow `none`", async () => {
+    const shadow = identityPlugin("none", () => ({ userId: "admin" }));
+    const { p, RED } = make({ plugins: [shadow], settings: { identityProvider: "none" } });
     expect(await p.resolveUser(req())).toBeNull();
-    expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toEqual({
-      userId: "u1",
-      groups: [],
-    });
-    expect(RED._logs.error.join("\n")).toMatch(/"headers" ignored: id is reserved/);
+    expect(RED._logs.error.join("\n")).toMatch(/"none" ignored: id is reserved/);
+  });
+
+  it("an id registered by two packages is used by neither (fail closed)", async () => {
+    const second = identityPlugin("headers", () => ({ userId: "admin" }), { module: "evil-pkg" });
+    const { p, RED } = make({ plugins: [second] });
+    expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
+    expect(RED._logs.error[0]).toMatch(
+      /"headers" is registered by more than one package \(@aaqu\/fromcubes-portal-react, evil-pkg\)/,
+    );
+    expect(() => p.select("identity", "headers")).toThrow(/more than one package/);
   });
 
   it("survives RED.plugins being absent or throwing", async () => {
     const RED = fakeRED({ settings: { identityProvider: "sso" } });
     RED.plugins = { getByType: () => { throw new Error("boom"); } };
-    const p = createProviders(RED, fakeHelpers);
+    const p = createProviders(RED);
     expect(await p.resolveUser(req())).toBeNull();
     delete RED.plugins;
     expect(await p.resolveUser(req())).toBeNull();
@@ -402,7 +423,7 @@ describe("choice made in the editor", () => {
 
   const withStore = (opts) => {
     const RED = fakeRED(opts);
-    return { RED, p: createProviders(RED, fakeHelpers, { storeFile: file }) };
+    return { RED, p: createProviders(RED, { storeFile: file }) };
   };
 
   it("select() switches, persists, and survives a restart", async () => {
@@ -507,21 +528,30 @@ describe("describe()", () => {
     const sso = identityPlugin("sso", () => null, { module: "sso-pkg", label: "Company SSO" });
     const old = identityPlugin("old", () => null, { apiVersion: 2, module: "old-pkg" });
     const odd = identityPlugin("has space", () => null, { module: "odd-pkg" });
-    const shadow = identityPlugin("headers", () => null, { module: "evil-pkg" });
+    const twin = identityPlugin("headers", () => null, { module: "evil-pkg" });
+    const shadow = identityPlugin("none", () => null, { module: "evil-pkg" });
     const uno = cssPlugin("uno", () => ({ css: "" }), { module: "uno-pkg" });
-    const { p } = make({ plugins: [sso, old, odd, shadow, uno] });
+    const { p } = make({ plugins: [sso, old, odd, twin, shadow, uno] });
     const d = p.describe();
 
     expect(d.identity).toMatchObject({ selected: "headers", source: "default", locked: false, missing: false });
-    expect(d.identity.options.map((o) => o.id)).toEqual(["headers", "none", "sso", "old", "has space"]);
+    expect(d.identity.options.map((o) => o.id)).toEqual(["none", "headers", "sso", "old", "has space"]);
     expect(d.identity.options[0]).toMatchObject({ module: "built-in", builtin: true });
+    expect(d.identity.options[1]).toMatchObject({ module: PKG, builtin: false });
+    expect(d.identity.options[1].problem).toMatch(/more than one package/);
     expect(d.identity.options[2]).toEqual({ id: "sso", label: "Company SSO", module: "sso-pkg", builtin: false });
     expect(d.identity.options[3].problem).toMatch(/apiVersion 2/);
     expect(d.identity.options[4].problem).toMatch(/cannot be selected/);
-    // The shadowing plugin is not offered — the built-in owns the id.
-    expect(d.identity.options.filter((o) => o.id === "headers")).toHaveLength(1);
+    // A plugin claiming a built-in id is not offered — the core owns `none`.
+    expect(d.identity.options.filter((o) => o.id === "none")).toHaveLength(1);
 
-    expect(d.css.options.map((o) => o.id)).toEqual(["tailwind", "none", "uno"]);
+    expect(d.css.options.map((o) => o.id)).toEqual(["none", "tailwind", "uno"]);
+    expect(d.css.options[1]).toEqual({
+      id: "tailwind",
+      label: "Tailwind CSS 4 utility classes",
+      module: PKG,
+      builtin: false,
+    });
   });
 
   it("reports source and lock", () => {
@@ -546,21 +576,27 @@ describe("describe()", () => {
 // ── editorClasses(): completion list for className="…" ──
 
 describe("editorClasses()", () => {
-  const helpersWithTw = {
-    ...fakeHelpers,
-    tailwindClasses: vi.fn(() => ["p-4", "m-2"]),
-  };
-  const makeTw = (opts) => {
-    const RED = fakeRED(opts);
-    return { RED, p: createProviders(RED, helpersWithTw) };
+  // Tailwind's real list is big; a stand-in keeps expectations readable.
+  const twClasses = vi.fn(() => ["p-4", "m-2"]);
+  const tw = cssPlugin("tailwind", () => ({ css: "" }), { editor: { classes: twClasses } });
+  const makeTw = ({ plugins = [], ...opts } = {}) => {
+    const RED = fakeRED({ ...opts, plugins: [ADDONS[0], tw, ...plugins], addons: false });
+    return { RED, p: createProviders(RED) };
   };
 
   it("tailwind: the candidate list, computed once", async () => {
-    helpersWithTw.tailwindClasses.mockClear();
+    twClasses.mockClear();
     const { p } = makeTw();
     expect(await p.editorClasses()).toEqual({ engine: "tailwind", classes: ["p-4", "m-2"] });
     await p.editorClasses();
-    expect(helpersWithTw.tailwindClasses).toHaveBeenCalledTimes(1);
+    expect(twClasses).toHaveBeenCalledTimes(1);
+  });
+
+  it("the real tailwind add-on ships its candidate list", async () => {
+    const { p } = make();
+    const { classes } = await p.editorClasses();
+    expect(classes.length).toBeGreaterThan(1000);
+    expect(classes).toContain("bg-red-500");
   });
 
   it("none, unknown engine, or a plugin without editor: empty list", async () => {
@@ -613,7 +649,8 @@ describe("editorClasses()", () => {
 
   it("a reinstalled plugin (new definition) is asked again", async () => {
     const plugins = [cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => ["v1"] } })];
-    const { p } = makeTw({ plugins, settings: { cssEngine: "uno" } });
+    // make(), not makeTw(): fakeRED must see this very array to observe the swap.
+    const { p } = make({ plugins, settings: { cssEngine: "uno" } });
     expect((await p.editorClasses()).classes).toEqual(["v1"]);
     plugins[0] = cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => ["v2"] } });
     expect((await p.editorClasses()).classes).toEqual(["v2"]);

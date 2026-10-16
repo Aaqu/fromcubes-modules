@@ -10,7 +10,7 @@
  * when it does not.
  */
 
-const { extractPortalUser } = require("../nodes/lib/helpers");
+const { extractPortalUser } = require("../nodes/addons/auth-headers/headers");
 const { route } = require("../nodes/lib/router");
 
 const MAX_GROUPS_HEADER_BYTES = 8 * 1024;

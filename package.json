@@ -17,6 +17,11 @@
     "version": ">=4.0.0",
     "nodes": {
       "portal-react": "nodes/portal-react.js"
+    },
+    "plugins": {
+      "fromcubes-auth-headers": "nodes/addons/auth-headers/auth-headers.js",
+      "fromcubes-tailwind": "nodes/addons/tailwind/tailwind.js",
+      "fromcubes-portal-assets": "nodes/addons/assets/portal-assets.js"
     }
   },
   "files": [

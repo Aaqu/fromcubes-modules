@@ -14,7 +14,6 @@ const path = require("path");
  * @param {Function} deps.permWrite
  * @param {Function} deps.csrfGuard
  * @param {Function} deps.rateLimit
- * @param {string} deps.userDir
  * @param {Object<string, Object>} deps.pageState
  * @param {Object<string, Object>} deps.registry
  * @param {Object<string, Object>} deps.utilities
@@ -30,7 +29,6 @@ function registerAdminApi(RED, deps) {
     permWrite,
     csrfGuard,
     rateLimit,
-    userDir,
     pageState,
     registry,
     utilities,
@@ -102,11 +100,6 @@ function registerAdminApi(RED, deps) {
 
   RED.httpNode.get("/fromcubes/css/:hash.css", serveCss);
 
-  const { registerAssets } = require("./assets");
-  registerAssets(RED, express, path.join(userDir, "fromcubes", "public"), {
-    csrfGuard,
-    rateLimit,
-  });
 
   RED.httpAdmin.get("/portal-react/registry", permRead, (_req, res) => {
     res.json(registry);

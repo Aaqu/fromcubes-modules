@@ -233,9 +233,9 @@ Same model as dashboard 2 — no auth required to use the node.
 
 ## Plugins: identity providers and CSS engines
 
-Who the user is and how CSS is generated are both pluggable. The defaults are
-built-in providers that use the same API: `headers` (the contract above) and
-`tailwind`. A separate npm package can register its own, e.g. for a different
+Who the user is and how CSS is generated are both pluggable. The defaults,
+`headers` (the contract above) and `tailwind`, are themselves plugins shipped
+in this package and use exactly this API. A separate npm package can register its own, e.g. for a different
 auth proxy or a different CSS tool:
 
 ```js

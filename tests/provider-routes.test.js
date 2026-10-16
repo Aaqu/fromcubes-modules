@@ -10,8 +10,10 @@ const express = require("express");
 const request = require("supertest");
 
 const { registerAdminApi } = require("../nodes/lib/admin-api");
-const { createProviders, IDENTITY_TYPE, API_VERSION } = require("../nodes/lib/providers");
-const { extractPortalUser } = require("../nodes/lib/helpers");
+const { createProviders, IDENTITY_TYPE, CSS_TYPE, API_VERSION } = require("../nodes/lib/providers");
+
+// Stand-in for the tailwind add-on, so the default CSS engine exists.
+const TAILWIND = { id: "tailwind", type: CSS_TYPE, apiVersion: API_VERSION, module: "pkg", generate: () => ({ css: "" }) };
 
 let tmpDir;
 let app;
@@ -28,18 +30,16 @@ function build({ plugins = [] } = {}) {
     httpAdmin: express.Router(),
     httpNode: express.Router(),
     settings: { portalReact: settings },
-    plugins: { getByType: (t) => plugins.filter((p) => p.type === t) },
+    plugins: { getByType: (t) => [TAILWIND, ...plugins].filter((p) => p.type === t) },
     log: {
       error: (m) => logs.push(["error", m]),
       warn: (m) => logs.push(["warn", m]),
       info: () => {},
     },
   };
-  const providers = createProviders(
-    RED,
-    { extractPortalUser, generateCSS: async () => ({ css: "" }) },
-    { storeFile: path.join(tmpDir, "fromcubes", "providers.json") },
-  );
+  const providers = createProviders(RED, {
+    storeFile: path.join(tmpDir, "fromcubes", "providers.json"),
+  });
   const mark = (list) => (req, _res, next) => {
     list.push(req.method + " " + req.path);
     next();
@@ -187,8 +187,8 @@ test("GET /portal-react/css-classes lists the engine in force, behind read permi
   const providers = build();
   let res = await request(app).get("/portal-react/css-classes");
   expect(res.status).toBe(200);
-  // build() passes no tailwindClasses helper, so tailwind yields [] here;
-  // the real list is covered by the tw-candidates test.
+  // The TAILWIND stand-in has no editor.classes(), so the list is empty
+  // here; the real add-on's list is covered in providers.test.js.
   expect(res.body).toEqual({ engine: "tailwind", classes: [] });
   expect(gate.read).toContain("GET /portal-react/css-classes");
 

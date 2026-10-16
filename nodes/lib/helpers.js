@@ -36,12 +36,6 @@ const fs = require("fs");
 const path = require("path");
 const esbuild = require("esbuild");
 
-// Cap on the `x-portal-user-groups` header. An oversized value is dropped
-// whole rather than cut: a truncated list could end in a shortened group name
-// that happens to match a different, real group. Same order of magnitude as
-// Express's default header size — an honest auth proxy never gets near it.
-const MAX_GROUPS_HEADER_BYTES = 8 * 1024;
-
 /**
  * Short content hash used for cache keys (16 hex chars of sha256).
  * @param {string} str
@@ -49,69 +43,6 @@ const MAX_GROUPS_HEADER_BYTES = 8 * 1024;
  */
 function hash(str) {
   return crypto.createHash("sha256").update(str).digest("hex").slice(0, 16);
-}
-
-const twCompile = require("tailwindcss").compile;
-const CANDIDATE_RE = /[a-zA-Z0-9_\-:.\/\[\]#%]+/g;
-
-// Contents of "…", '…' and `…` literals in the scanned source. Tailwind
-// classes live inside string literals, and splitting THOSE on whitespace
-// keeps arbitrary values with `(`, `)`, `,`, `!`, `@`, `'` intact — chars
-// CANDIDATE_RE cannot include globally without gluing candidates to
-// surrounding code (`className="w-…`). Single regex alternation, escape-aware.
-const STRING_LITERAL_RE =
-  /"([^"\\\n]*(?:\\.[^"\\\n]*)*)"|'([^'\\\n]*(?:\\.[^'\\\n]*)*)'|`([^`\\]*(?:\\.[^`\\]*)*)`/g;
-
-let twCompiled = null;
-/**
- * Lazily compile the Tailwind base stylesheet. Result is memoized at module
- * scope — first call resolves async stylesheet imports, every subsequent
- * call returns the cached compiler.
- *
- * @returns {Promise<Object>}  Tailwind `compile()` result with a `.build()` method.
- */
-async function getTwCompiled() {
-  if (twCompiled) return twCompiled;
-  twCompiled = await twCompile(`@import 'tailwindcss';`, {
-    loadStylesheet: async (id, base) => {
-      let resolved;
-      if (id === "tailwindcss") {
-        resolved = require.resolve("tailwindcss/index.css");
-      } else {
-        resolved = require.resolve(id, { paths: [base || __dirname] });
-      }
-      return {
-        content: fs.readFileSync(resolved, "utf8"),
-        base: path.dirname(resolved),
-      };
-    },
-  });
-  return twCompiled;
-}
-
-/**
- * Generate the per-page Tailwind CSS bundle by scanning `source` for utility
- * class candidates and feeding them to the compiled Tailwind core.
- *
- * @param {string} source                       Source text to scan for class candidates.
- * @returns {Promise<{css: string, cssHash: string}>}
- */
-async function generateCSS(source) {
-  const cssHash = hash(source);
-  const compiled = await getTwCompiled();
-  const candidates = new Set(source.match(CANDIDATE_RE) || []);
-  // Second pass: whitespace-split string-literal contents so arbitrary
-  // values like w-[calc(100%-2rem)], grid-cols-[repeat(2,1fr)], mt-0! and
-  // @md:flex survive as single candidates. Tailwind ignores candidates that
-  // don't parse as utilities, so the extra tokens are harmless.
-  STRING_LITERAL_RE.lastIndex = 0;
-  let m;
-  while ((m = STRING_LITERAL_RE.exec(source)) !== null) {
-    const body = m[1] ?? m[2] ?? m[3] ?? "";
-    for (const tok of body.split(/\s+/)) if (tok) candidates.add(tok);
-  }
-  const css = compiled.build([...candidates]);
-  return { css, cssHash };
 }
 
 // Component / utility names become JavaScript identifiers in the generated
@@ -208,76 +139,6 @@ function validateSubPath(input) {
     }
   }
   return { ok: true, value: trimmed };
-}
-
-// Single-value identity headers → PortalUser field. `x-portal-user-id` is the
-// gate: without it the request is anonymous and the rest is ignored.
-const PORTAL_USER_FIELDS = [
-  ["x-portal-user-login", "login"],
-  ["x-portal-user-display-name", "displayName"],
-  ["x-portal-user-email", "email"],
-  ["x-portal-user-role", "role"],
-];
-
-/**
- * Percent-decode one header value (UTF-8). Returns undefined for a malformed
- * escape or an empty result, so the caller skips the value instead of
- * keeping a half-decoded string.
- *
- * @param {*} raw
- * @returns {string|undefined}
- */
-function decodeHeaderValue(raw) {
-  if (typeof raw !== "string" || raw === "") return undefined;
-  try {
-    const value = decodeURIComponent(raw);
-    return value === "" ? undefined : value;
-  } catch (_) {
-    return undefined;
-  }
-}
-
-/**
- * Parse `x-portal-user-groups`: comma-separated, each element percent-encoded
- * on its own, so a literal comma inside a group name arrives as `%2C`. Split
- * on the raw commas BEFORE decoding; empty elements and elements with a
- * malformed escape are dropped, the rest survive.
- *
- * @param {*} raw
- * @returns {Array<string>}
- */
-function parseGroupsHeader(raw) {
-  if (typeof raw !== "string" || raw.length > MAX_GROUPS_HEADER_BYTES) {
-    return [];
-  }
-  const groups = [];
-  for (const part of raw.split(",")) {
-    // Trim the raw element: Node joins a repeated header with ", ".
-    const value = decodeHeaderValue(part.trim());
-    if (value !== undefined) groups.push(value);
-  }
-  return groups;
-}
-
-/**
- * Build a PortalUser object from `x-portal-user-*` headers set by an upstream
- * auth proxy. Every value is percent-encoded UTF-8 (HTTP headers carry only
- * latin1, so "Łukasz" cannot travel raw). Returns null — anonymous — when
- * `x-portal-user-id` is missing or undecodable, whatever else is present.
- *
- * @param {Object<string,string>} headers HTTP request headers (lower-cased).
- * @returns {PortalUser|null}
- */
-function extractPortalUser(headers) {
-  const userId = decodeHeaderValue(headers["x-portal-user-id"]);
-  if (userId === undefined) return null;
-  const user = { userId };
-  for (const [header, field] of PORTAL_USER_FIELDS) {
-    const value = decodeHeaderValue(headers[header]);
-    if (value !== undefined) user[field] = value;
-  }
-  user.groups = parseGroupsHeader(headers["x-portal-user-groups"]);
-  return user;
 }
 
 /**
@@ -873,11 +734,9 @@ module.exports = function (RED) {
 };
 
 module.exports.validateSubPath = validateSubPath;
-module.exports.generateCSS = generateCSS;
 module.exports.isSafeName = isSafeName;
 module.exports.quickCheckSyntax = quickCheckSyntax;
 module.exports.formatEsbuildError = formatEsbuildError;
-module.exports.extractPortalUser = extractPortalUser;
 module.exports.findMissingComponentRefs = findMissingComponentRefs;
 module.exports.stripComments = stripComments;
 module.exports.extractImports = extractImports;
@@ -887,7 +746,6 @@ module.exports.serveableHash = serveableHash;
 module.exports.hasFreshBuild = hasFreshBuild;
 module.exports.shouldSkipInstall = shouldSkipInstall;
 module.exports.NAME_MAX_LEN = NAME_MAX_LEN;
-module.exports.MAX_GROUPS_HEADER_BYTES = MAX_GROUPS_HEADER_BYTES;
 
 /**
  * Factory that produces the runtime helper bag bound to a Node-RED instance.
@@ -1109,8 +967,6 @@ function createHelpers(RED) {
     hash,
     transpile,
     quickCheckSyntax,
-    generateCSS,
-    extractPortalUser,
     serveableHash,
     hasFreshBuild,
     removeRoute,
