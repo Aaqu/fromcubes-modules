@@ -43,47 +43,68 @@ jobs:
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: |
-          RELEASED=""
+          : > released.txt
           for DIR in fromcubes-auth-headers fromcubes-tailwind fromcubes-assets fromcubes-react; do
             PKG="packages/$DIR/package.json"
+            NAME=$(jq -r .name "$PKG")
             VERSION=$(jq -r .version "$PKG")
             # Release tags are unscoped (`fromcubes-tailwind@x.y.z`): strip the
             # npm scope so lookup and creation use the same prefix.
-            PREFIX=$(jq -r .name "$PKG" | sed 's|.*/||')
-            LATEST_TAG=$(git tag --list "${PREFIX}@*" --sort=-v:refname | head -n1 || true)
-            LATEST_VERSION=${LATEST_TAG##*@}
-            if [ "${LATEST_VERSION:-0.0.0}" = "$VERSION" ]; then
-              echo "$PREFIX $VERSION: unchanged"
+            PREFIX=${NAME##*/}
+            if git rev-parse -q --verify "refs/tags/$PREFIX@$VERSION" >/dev/null; then
+              echo "$PREFIX $VERSION: already released"
               continue
             fi
-            echo "$PREFIX: ${LATEST_VERSION:-none} -> $VERSION"
-            if [[ "$VERSION" == *-alpha* ]]; then
-              # Alpha releases go straight to `latest` ON PURPOSE: the registry
-              # copies README into the packument only on a publish that sets
-              # the latest tag — `npm dist-tag add … latest` afterwards does
-              # NOT refresh it, which left the flows.nodered.org page empty.
-              # Deliberately NO `alpha` dist-tag: `npm dist-tag add` is a
-              # 2FA-gated write that fails with EOTP in CI (publish itself
-              # passes via OIDC provenance), and `latest` is the newest alpha.
-              TAG=latest
-            elif [[ "$VERSION" == *-beta* ]]; then
-              TAG=beta
-            elif [[ "$VERSION" == *-rc* ]]; then
-              TAG=rc
+            PREV_TAG=$(git tag --list "${PREFIX}@*" --sort=-v:refname | head -n1 || true)
+            # Idempotent: a run that published but died before tagging (or a
+            # manual publish) must not try again — npm refuses a version twice.
+            # Only the tag and the GitHub release are still owed.
+            if npm view "$NAME@$VERSION" version >/dev/null 2>&1; then
+              echo "$PREFIX $VERSION: already on npm, releasing on GitHub only"
             else
-              TAG=latest
+              echo "$PREFIX: ${PREV_TAG:-none} -> $VERSION"
+              if [[ "$VERSION" == *-alpha* ]]; then
+                # Alpha releases go straight to `latest` ON PURPOSE: the registry
+                # copies README into the packument only on a publish that sets
+                # the latest tag — `npm dist-tag add … latest` afterwards does
+                # NOT refresh it, which left the flows.nodered.org page empty.
+                # Deliberately NO `alpha` dist-tag: `npm dist-tag add` is a
+                # 2FA-gated write that fails with EOTP in CI (publish itself
+                # passes via OIDC provenance), and `latest` is the newest alpha.
+                TAG=latest
+              elif [[ "$VERSION" == *-beta* ]]; then
+                TAG=beta
+              elif [[ "$VERSION" == *-rc* ]]; then
+                TAG=rc
+              else
+                TAG=latest
+              fi
+              # The registry can lag a few minutes behind a publish, so `npm view`
+              # may miss a version that is already there; npm then refuses with
+              # "cannot publish over the previously published versions". That
+              # means done, not failed.
+              if ! OUT=$(npm publish --workspace "packages/$DIR" --tag "$TAG" --provenance 2>&1); then
+                echo "$OUT"
+                if grep -q "previously published" <<<"$OUT"; then
+                  echo "$PREFIX $VERSION: already on npm (registry lagging), releasing on GitHub only"
+                else
+                  exit 1
+                fi
+              else
+                echo "$OUT"
+              fi
             fi
-            npm publish --workspace "packages/$DIR" --tag "$TAG" --provenance
-            RELEASED="$RELEASED $DIR|$PREFIX|$VERSION|$LATEST_TAG"
+            # One line per package: dir, tag to create, previous tag. Kept in a
+            # file, never spliced into a script: later steps read it as data.
+            printf '%s %s %s\n' "$DIR" "$PREFIX@$VERSION" "$PREV_TAG" >> released.txt
           done
-          echo "released=$RELEASED" >> $GITHUB_OUTPUT
+          echo "count=$(wc -l < released.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
 
       - name: Collect release notes
-        if: steps.publish.outputs.released != ''
+        if: steps.publish.outputs.count != '0'
         run: |
           mkdir -p .release-notes
-          for ENTRY in ${{ steps.publish.outputs.released }}; do
-            IFS='|' read -r DIR PREFIX VERSION PREV <<< "$ENTRY"
+          while read -r DIR TAG PREV; do
             if [ -n "$PREV" ] && git rev-parse -q --verify "refs/tags/$PREV" >/dev/null; then
               RANGE="$PREV..HEAD"
             else
@@ -92,11 +113,11 @@ jobs:
             {
               echo '## Changes'
               git log "$RANGE" --no-merges --pretty='- %s (%h)' -- "packages/$DIR"
-            } > ".release-notes/$PREFIX@$VERSION.md"
-          done
+            } > ".release-notes/$TAG.md"
+          done < released.txt
 
       - name: Create GitHub Releases
-        if: steps.publish.outputs.released != ''
+        if: steps.publish.outputs.count != '0'
         uses: actions/github-script@v9
         with:
           script: |
@@ -108,6 +129,7 @@ jobs:
                   owner: context.repo.owner,
                   repo: context.repo.repo,
                   tag_name: tag,
+                  target_commitish: context.sha,
                   name: tag,
                   body: fs.readFileSync(".release-notes/" + file, "utf8") || `Release ${tag}`,
                 });
