@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-assets",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Fromcubes Assets: static files for portals, managed from a Node-RED sidebar",
   "type": "commonjs",
   "keywords": [
@@ -39,8 +39,8 @@
   },
   "homepage": "https://aaqu.github.io/fromcubes-modules/",
   "funding": {
-    "type": "ko-fi",
-    "url": "https://ko-fi.com/L4L01UOFRG"
+    "type": "github",
+    "url": "https://github.com/sponsors/Aaqu"
   },
   "license": "Apache-2.0",
   "author": {

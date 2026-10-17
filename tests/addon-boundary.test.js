@@ -129,6 +129,14 @@ describe.each(addonDirs.map((d) => [path.basename(d), d]))("add-on %s", (_name, 
   });
 });
 
+test("the core does not depend on any add-on — installing it gives the core alone", () => {
+  const core = readPkg(CORE_DIR);
+  const addonNames = addonDirs.map((d) => readPkg(d).name);
+  for (const field of ["dependencies", "peerDependencies", "optionalDependencies"]) {
+    for (const name of addonNames) expect(core[field]?.[name], `${field}.${name}`).toBeUndefined();
+  }
+});
+
 test("the core never requires an add-on or reaches outside its package", () => {
   const addonNames = new Set(addonDirs.map((d) => readPkg(d).name));
   for (const file of sourceFiles(path.join(CORE_DIR, "nodes"))) {

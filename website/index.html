@@ -80,8 +80,8 @@
   .btn:hover { text-decoration: none; border-color: #3a3a42; }
   .btn.primary { background: var(--accent); border-color: var(--accent); color: #1a1205; }
   .btn.primary:hover { filter: brightness(1.08); }
-  .btn.kofi { background: #ff5e5b; border-color: #ff5e5b; color: #fff; }
-  .btn.kofi:hover { filter: brightness(1.08); }
+  .btn.sponsor { background: #ea4aaa; border-color: #ea4aaa; color: #fff; }
+  .btn.sponsor:hover { filter: brightness(1.08); }
 
   .features {
     display: grid; grid-template-columns: repeat(3, 1fr);
@@ -172,7 +172,7 @@
 
 <header class="site">
   <div class="inner">
-    <div class="logo">fromcubes-<span>portal-react</span></div>
+    <div class="logo">fromcubes-<span>react</span></div>
     <nav>
       <a href="#install">Install</a>
       <a href="#import">Import</a>
@@ -206,7 +206,7 @@
     <div class="cta">
       <a class="btn primary" href="#install">Get started</a>
       <a class="btn" href="https://github.com/Aaqu/fromcubes-modules">Source on GitHub</a>
-      <a class="btn kofi" href="https://ko-fi.com/L4L01UOFRG">☕ Support on Ko-fi</a>
+      <a class="btn sponsor" href="https://github.com/sponsors/Aaqu">❤️ Sponsor on GitHub</a>
     </div>
   </div>
 
@@ -217,7 +217,7 @@
     </div>
     <div class="feature">
       <h3>🎨 Tailwind CSS 4</h3>
-      <p>Utility classes are scanned server-side and served as static CSS. Autocompletion in the editor included.</p>
+      <p>Utility classes are scanned server-side and served as static CSS. Autocompletion in the editor included. Comes with the <em>fromcubes-tailwind</em> add-on.</p>
     </div>
     <div class="feature">
       <h3>🔌 Live WebSocket data</h3>
@@ -233,7 +233,7 @@
     </div>
     <div class="feature">
       <h3>🗂 Static assets</h3>
-      <p>Built-in file manager sidebar serves models, textures and fonts at <em>/fromcubes/public/</em>.</p>
+      <p>A file manager sidebar serves models, textures and fonts at <em>/fromcubes/public/</em>. Comes with the <em>fromcubes-assets</em> add-on.</p>
     </div>
   </div>
 </div>
@@ -243,17 +243,39 @@
   <div class="wrap">
     <span class="step-tag"><span class="n">1</span> Install</span>
     <h2>Install the package in Node-RED</h2>
-    <p>Requires Node-RED ≥ 4 and Node.js ≥ 18.5. Two ways to install — pick one:</p>
-    <p style="margin-top:20px"><strong>Option A — Palette Manager (no terminal needed).</strong> In the editor open <strong>Menu → Manage palette → Install</strong>, search for <code>fromcubes-react</code> and click <em>install</em>:</p>
+    <p>Requires Node-RED ≥ 4 and Node.js ≥ 18.5.</p>
+    <p>The project is split into a <strong>core</strong> and <strong>add-ons</strong>. The core, <code>@aaqu/fromcubes-react</code>, is all you need to build portals; each add-on switches on one extra feature:</p>
+    <div class="table-scroll"><table>
+      <thead><tr><th>Module</th><th>What it adds</th></tr></thead>
+      <tbody>
+        <tr><td><code>@aaqu/fromcubes-react</code></td><td><strong>The core</strong> — the nodes, deploy-time bundling, live WebSocket data, the React Editor</td></tr>
+        <tr><td><code>@aaqu/fromcubes-tailwind</code></td><td>Tailwind CSS 4 for portals, plus class completion in the editor. <strong>This guide's example is styled with it.</strong></td></tr>
+        <tr><td><code>@aaqu/fromcubes-assets</code></td><td>The <em>Portal Assets</em> sidebar: static files served at <code>/fromcubes/public/</code></td></tr>
+        <tr><td><code>@aaqu/fromcubes-auth-headers</code></td><td>Portal users from <code>x-portal-user-*</code> headers set by a reverse proxy (Portal Auth)</td></tr>
+      </tbody>
+    </table></div>
+    <p style="margin-top:16px">For this guide install the core and Tailwind; add the other two whenever you need them — each switches on by itself once installed. Two ways to install — pick one:</p>
+    <p style="margin-top:20px"><strong>Option A — Palette Manager (no terminal needed).</strong> In the editor open <strong>Menu → Manage palette → Install</strong>, search for <code>fromcubes</code> and click <em>install</em> on <code>@aaqu/fromcubes-react</code>, then on <code>@aaqu/fromcubes-tailwind</code>:</p>
     <figure>
-      <a href="img/07-install-palette.png"><img src="img/07-install-palette.png" alt="Node-RED Manage palette Install tab with @aaqu/fromcubes-react found in the catalogue" loading="lazy"></a>
-      <figcaption>Manage palette → Install: the package is in the Node-RED community catalogue.</figcaption>
+      <a href="img/07-install-palette.png"><img src="img/07-install-palette.png" alt="Node-RED Manage palette, Install tab, search @aaqu/fromcubes- listing @aaqu/fromcubes-portal-react, @aaqu/fromcubes-assets, @aaqu/fromcubes-auth-headers, @aaqu/fromcubes-react and @aaqu/fromcubes-tailwind with install buttons" loading="lazy"></a>
+      <figcaption>Manage palette → Install: the core and the three add-ons in the Node-RED catalogue. <code>@aaqu/fromcubes-portal-react</code> is the old name — skip it.</figcaption>
     </figure>
     <p style="margin-top:26px"><strong>Option B — npm.</strong> Install into your Node-RED user directory (usually <code>~/.node-red</code>) and restart Node-RED:</p>
     <pre>cd ~/.node-red
-npm install @aaqu/fromcubes-react
+npm install @aaqu/fromcubes-react @aaqu/fromcubes-tailwind
+<span class="c"># optional: @aaqu/fromcubes-assets @aaqu/fromcubes-auth-headers</span>
 <span class="c"># restart Node-RED afterwards</span></pre>
-    <p style="margin-top:16px">Either way, three new nodes appear in the palette under the <strong>fromcubes</strong> category: <code>portal react</code>, <code>react component</code> and <code>react utility</code>.</p>
+    <p style="margin-top:16px">Each installed module is listed on its own in <strong>Menu → Manage palette → Nodes</strong> — the core with its three nodes, each add-on as one plugin — and can be updated or removed there independently.</p>
+    <figure>
+      <a href="img/07-palette-modules.png"><img src="img/07-palette-modules.png" alt="Node-RED Manage palette, Nodes tab: @aaqu/fromcubes-react with 3 nodes, and @aaqu/fromcubes-assets, @aaqu/fromcubes-auth-headers, @aaqu/fromcubes-tailwind with 1 plugin each" loading="lazy"></a>
+      <figcaption>Manage palette → Nodes, with the core and all three add-ons installed.</figcaption>
+    </figure>
+    <p style="margin-top:16px">Three new nodes appear in the palette under the <strong>fromcubes</strong> category: <code>portal react</code>, <code>react component</code> and <code>react utility</code>. <strong>Menu → Settings → Fromcubes</strong> shows which identity provider and CSS engine the portals use — whatever add-on is installed, or <code>none</code> without one. There is nothing to set:</p>
+    <figure>
+      <a href="img/08-settings-fromcubes.png"><img src="img/08-settings-fromcubes.png" alt="Node-RED User Settings, Fromcubes tab: identity provider headers from @aaqu/fromcubes-auth-headers and CSS engine tailwind from @aaqu/fromcubes-tailwind are selected" loading="lazy"></a>
+      <figcaption>Settings → Fromcubes: one identity provider and one CSS engine, each from its module.</figcaption>
+    </figure>
+    <div class="callout" style="margin-top:22px"><strong>Coming from <code>@aaqu/fromcubes-portal-react</code>?</strong> That old package contained the core and all three add-ons. Remove it in <em>Manage palette → Nodes</em> (or <code>npm uninstall @aaqu/fromcubes-portal-react</code>) — it registers the same nodes — then install <code>@aaqu/fromcubes-react</code> <em>and</em> the add-ons you used (most likely all three, for the same features as before). Your flows keep working unchanged.</div>
   </div>
 </section>
 
@@ -407,8 +429,13 @@ return msg;</pre>
       <li><strong>Live Chart</strong> — Chart.js streaming chart (npm packages via the node's <em>libs</em> list),</li>
       <li><strong>Three.js Scene</strong> — react-three-fiber 3D scene,</li>
       <li><strong>D3 Poland Map</strong>, <strong>PixiJS Sprites</strong>, <strong>WebGPU Shader</strong> — more bundling show-cases,</li>
-      <li><strong>Utility Hooks</strong> — share plain helpers and custom hooks via <em>react utility</em> nodes.</li>
+      <li><strong>Utility Hooks</strong> — share plain helpers and custom hooks via <em>react utility</em> nodes,</li>
+      <li><strong>Portal Assets</strong> — open the sidebar tab (the <em>fromcubes-assets</em> add-on), upload a model or texture and load it from a portal at <code>/fromcubes/public/&lt;path&gt;</code>.</li>
     </ul>
+    <figure>
+      <a href="img/09-assets-sidebar.png"><img src="img/09-assets-sidebar.png" alt="Portal Assets sidebar tab in Node-RED showing /fromcubes/public with a textures folder and an uploaded PNG file" loading="lazy"></a>
+      <figcaption>The Portal Assets sidebar: upload, folders, rename, download — files served at <em>/fromcubes/public/</em>.</figcaption>
+    </figure>
   </div>
 </section>
 
@@ -419,7 +446,7 @@ return msg;</pre>
       <a href="https://github.com/Aaqu/fromcubes-modules">GitHub</a> ·
       <a href="https://www.npmjs.com/package/@aaqu/fromcubes-react">npm</a> ·
       <a href="https://discord.gg/KYzsfKkYxX">Discord</a> ·
-      <a href="https://ko-fi.com/L4L01UOFRG">Ko-fi</a>
+      <a href="https://github.com/sponsors/Aaqu">Sponsor</a>
     </div>
   </div>
 </footer>

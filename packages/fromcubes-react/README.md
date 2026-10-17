@@ -6,12 +6,11 @@
 [![Node-RED](https://img.shields.io/badge/Node--RED-%E2%89%A5%204.0-8f0000.svg)](https://nodered.org)
 [![license](https://img.shields.io/npm/l/%40aaqu%2Ffromcubes-react.svg)](./LICENSE)
 [![Discord](https://img.shields.io/badge/Discord-join%20chat-5865F2?logo=discord&logoColor=white)](https://discord.gg/KYzsfKkYxX)
+[![Sponsor](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 **📖 Documentation — step-by-step guide with screenshots:** [aaqu.github.io/fromcubes-modules](https://aaqu.github.io/fromcubes-modules/) — install → import → edit JSX → live dashboard, on one example.
 
 [![Documentation walkthrough](https://aaqu.github.io/fromcubes-modules/img/docs-scroll.gif)](https://aaqu.github.io/fromcubes-modules/)
-
-> **⚠️ Alpha Module** — This project is in early development. Expect breaking changes. Test on a clean Node-RED instance.
 
 A Node-RED node that turns any `/fromcubes/<sub-path>` URL into a React page. Write JSX in the editor, deploy, open the URL — your component talks to the flow over WebSocket. No build step, no browser compiler. All portal pages are served under the hardcoded `/fromcubes/` prefix so every node cleanly coexists under one URL tree.
 
@@ -19,7 +18,7 @@ For internals, plugin authoring, and the deploy pipeline see [README-DEV.md](./R
 
 **💬 Questions, feedback, showcase?** Join the [fromcubes Discord](https://discord.gg/KYzsfKkYxX).
 
-[![ko-fi](https://ko-fi.com/img/githubbutton_sm.svg)](https://ko-fi.com/L4L01UOFRG)
+**❤️ Support the project:** [![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 ## Prerequisites
 
@@ -41,12 +40,17 @@ npm install @aaqu/fromcubes-react
 # restart Node-RED
 ```
 
-That's it. No build step. Any npm packages you list in the node config (e.g. `d3, three`) are installed automatically on deploy.
+That's it — this is the whole core: the nodes, deploy-time bundling, the WebSocket bridge and the React Editor. No build step. Any npm packages you list in the node config (e.g. `d3, three`) are installed automatically on deploy.
 
 ### Add-ons
 
-Three parts ship as their own packages, and for now installing the core
-installs them too:
+Everything else is an add-on you install only if you need it:
+
+```bash
+cd ~/.node-red
+npm install @aaqu/fromcubes-tailwind        # and/or -assets, -auth-headers
+# restart Node-RED
+```
 
 | Package | What it adds |
 |---|---|
@@ -54,10 +58,29 @@ installs them too:
 | [`@aaqu/fromcubes-auth-headers`](https://www.npmjs.com/package/@aaqu/fromcubes-auth-headers) | Users from `x-portal-user-*` headers set by a reverse proxy (Portal Auth) |
 | [`@aaqu/fromcubes-assets`](https://www.npmjs.com/package/@aaqu/fromcubes-assets) | Static files for portals, managed from a sidebar tab |
 
-Each is a Node-RED plugin built on the same API anyone can use — see
-[Plugins](#plugins-identity-providers-and-css-engines). Coming from
-`@aaqu/fromcubes-portal-react`? Uninstall it first, then install this
-package: both register the same nodes. Your flows keep working unchanged.
+Without an add-on its feature is simply off, and the editor says so once in
+the log: no Tailwind means portals get no generated stylesheet (style them
+with a `<link>`/`<style>` in **Head HTML**, or inline), no auth-headers means
+Portal Auth sees every session as anonymous, no assets means no sidebar and no
+`/fromcubes/public/`. Install an add-on later and it switches on by itself —
+**Menu → Settings → Fromcubes** shows what is in use.
+
+The shipped examples are styled with Tailwind; install
+`@aaqu/fromcubes-tailwind` to see them as intended.
+
+Each add-on is a Node-RED plugin built on the same API anyone can use — see
+[Plugins](#plugins-identity-providers-and-css-engines).
+
+**Coming from `@aaqu/fromcubes-portal-react`?** It contained all of the above.
+Uninstall it first (both register the same nodes), then install the core
+**and the add-ons you used** — for the same features as before:
+
+```bash
+npm uninstall @aaqu/fromcubes-portal-react
+npm install @aaqu/fromcubes-react @aaqu/fromcubes-tailwind @aaqu/fromcubes-assets @aaqu/fromcubes-auth-headers
+```
+
+Your flows keep working unchanged.
 
 ## Your first portal
 
@@ -400,6 +423,13 @@ behind a reverse proxy. Highlights:
   deployments **must** terminate auth at a reverse proxy that strips all six
   inbound identity headers before injecting verified ones, and Node-RED must
   not be reachable except through that proxy.
+
+## Support
+
+fromcubes is built and maintained by one person. If it saves you time,
+consider sponsoring its development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 ## License
 

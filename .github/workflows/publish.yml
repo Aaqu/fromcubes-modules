@@ -35,8 +35,9 @@ jobs:
           npm test
 
       # Each package is released on its own, when its version differs from
-      # its latest tag. Add-ons go before the core: the core depends on them
-      # (transitional), so they must be on the registry first.
+      # its latest tag. Add-ons go first: they peer-depend on the core only
+      # loosely (>=0.1.0 <1.0.0), so the order rarely matters, but a core
+      # release that relies on a new add-on version must find it published.
       - name: Publish changed packages
         id: publish
         env:

@@ -630,6 +630,13 @@ body.fc-ws-open #red-ui-notifications {
 /* ── Settings → Fromcubes (provider-settings.js) ─────────────────
    Lives in Node-RED's own Settings tray, not in the overlay, so it uses
    Node-RED's theme variables instead of the vs-dark palette above. */
+/* Same box as Node-RED's own View pane (#red-ui-settings-tab-view): fills
+   the content area, scrolls on its own, 20px side padding. */
+.fc-ps {
+  position: absolute; top: 0; right: 0; bottom: 0; left: 0;
+  padding: 8px 20px 20px;
+  overflow-y: auto;
+}
 .fc-ps .fc-ps-section { margin-bottom: 24px; }
 .fc-ps .fc-ps-hint { color: var(--red-ui-secondary-text-color); margin: 0 0 8px; }
 .fc-ps .fc-ps-note,

@@ -124,14 +124,43 @@ describe("defaults", () => {
     expect(css).toMatch(/\.p-4\s*\{/);
   });
 
-  it("without the add-ons the defaults are missing: anonymous and unstyled", async () => {
+  it("core alone: both default to none, quietly, with one hint each", async () => {
     const { p, RED } = make({ addons: false });
-    expect(p.identityId()).toBe("headers");
+    RED.log.info = vi.fn();
+    expect(p.identityId()).toBe("none");
+    expect(p.cssEngineId()).toBe("none");
     expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
-    expect(RED._logs.error[0]).toMatch(/"headers" is not registered/);
-    await expect(p.generateCss("p-4")).rejects.toThrow(/"tailwind" is not registered/);
-    // `none` is always there — the core's own.
-    expect(p.select("identity", "none")).toBe(true);
+    expect(await p.resolveUser(req({ "x-portal-user-id": "u1" }))).toBeNull();
+    expect(await p.generateCss("p-4")).toEqual({ css: "" });
+    // Nothing is broken, so nothing is an error…
+    expect(RED._logs.error).toEqual([]);
+    expect(RED._logs.warn).toEqual([]);
+    // …but each kind says once what to install.
+    const hints = RED.log.info.mock.calls.map(([m]) => m);
+    expect(hints).toHaveLength(2);
+    expect(hints.join("\n")).toMatch(/@aaqu\/fromcubes-auth-headers/);
+    expect(hints.join("\n")).toMatch(/@aaqu\/fromcubes-tailwind/);
+    const d = p.describe();
+    expect(d.identity).toMatchObject({ selected: "none", source: "default", missing: false });
+    expect(d.css).toMatchObject({ selected: "none", source: "default", missing: false });
+  });
+
+  it("installing the official add-on later turns it on", async () => {
+    const plugins = [];
+    const { p } = make({ addons: false, plugins });
+    expect(p.cssEngineId()).toBe("none");
+    plugins.push(ADDONS[1]);
+    expect(p.cssEngineId()).toBe("tailwind");
+  });
+
+  it("only the official package is a default — a look-alike is not", async () => {
+    const lookalike = identityPlugin("headers", () => ({ userId: "admin" }), { module: "evil-pkg" });
+    const { p } = make({ addons: false, plugins: [lookalike] });
+    expect(p.identityId()).toBe("none");
+    expect(await p.resolveUser(req())).toBeNull();
+    // Chosen explicitly it is used, like any third-party provider.
+    expect(p.select("identity", "headers")).toBe(true);
+    expect(await p.resolveUser(req())).toEqual({ userId: "admin", groups: [] });
   });
 
   it("built-in none engine emits empty css", async () => {
@@ -580,7 +609,7 @@ describe("describe()", () => {
 describe("editorClasses()", () => {
   // Tailwind's real list is big; a stand-in keeps expectations readable.
   const twClasses = vi.fn(() => ["p-4", "m-2"]);
-  const tw = cssPlugin("tailwind", () => ({ css: "" }), { editor: { classes: twClasses } });
+  const tw = cssPlugin("tailwind", () => ({ css: "" }), { module: TAILWIND_PKG, editor: { classes: twClasses } });
   const makeTw = ({ plugins = [], ...opts } = {}) => {
     const RED = fakeRED({ ...opts, plugins: [ADDONS[0], tw, ...plugins], addons: false });
     return { RED, p: createProviders(RED) };

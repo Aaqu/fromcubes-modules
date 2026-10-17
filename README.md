@@ -4,9 +4,8 @@ React portals for Node-RED — write JSX in the editor, deploy, open the URL; th
 page talks to your flow over WebSocket. No build step, no browser compiler.
 
 **📖 Documentation:** [aaqu.github.io/fromcubes-modules](https://aaqu.github.io/fromcubes-modules/) ·
-**💬 Discord:** [join](https://discord.gg/KYzsfKkYxX)
-
-> **⚠️ Alpha** — early development, expect breaking changes.
+**💬 Discord:** [join](https://discord.gg/KYzsfKkYxX) ·
+**❤️ Sponsor:** [GitHub Sponsors](https://github.com/sponsors/Aaqu)
 
 ## Packages
 
@@ -19,7 +18,8 @@ page talks to your flow over WebSocket. No build step, no browser compiler.
 
 ```bash
 cd ~/.node-red
-npm install @aaqu/fromcubes-react   # brings the three add-ons along, for now
+npm install @aaqu/fromcubes-react          # the core, on its own
+npm install @aaqu/fromcubes-tailwind       # add-ons: only the ones you need
 # restart Node-RED
 ```
 
@@ -35,6 +35,13 @@ npm test      # every package, plus the cross-package tests in tests/
 ```
 
 Internals and the plugin API: [README-DEV.md](packages/fromcubes-react/README-DEV.md).
+
+## Support
+
+fromcubes is built and maintained by one person. If it saves you time,
+consider sponsoring its development:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor_on-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/Aaqu)
 
 ## License
 
