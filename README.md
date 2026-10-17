@@ -18,7 +18,8 @@ page talks to your flow over WebSocket. No build step, no browser compiler.
 
 ```bash
 cd ~/.node-red
-npm install @aaqu/fromcubes-react   # brings the three add-ons along, for now
+npm install @aaqu/fromcubes-react          # the core, on its own
+npm install @aaqu/fromcubes-tailwind       # add-ons: only the ones you need
 # restart Node-RED
 ```
 

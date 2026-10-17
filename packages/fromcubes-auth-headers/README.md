@@ -38,9 +38,10 @@ npm install @aaqu/fromcubes-auth-headers
 # restart Node-RED
 ```
 
-Requires `@aaqu/fromcubes-react` (a peer dependency). `headers` is the default
-identity provider; **Menu → Settings → Fromcubes** shows it and lets you
-switch providers.
+Requires `@aaqu/fromcubes-react` (a peer dependency). Once installed, `headers`
+becomes the identity provider by itself (unless you chose another before);
+**Menu → Settings → Fromcubes** shows it and lets you switch providers.
+Without this add-on, Portal Auth sees every session as anonymous.
 
 ## Support
 

@@ -20,8 +20,10 @@ npm install @aaqu/fromcubes-tailwind
 ```
 
 Requires `@aaqu/fromcubes-react` (a peer dependency — npm installs it if it is
-missing). `tailwind` is the default CSS engine, so nothing else needs setting;
-**Menu → Settings → Fromcubes** shows it and lets you switch engines.
+missing). Once installed, `tailwind` becomes the CSS engine by itself — there
+is nothing to set (unless you chose another engine before);
+**Menu → Settings → Fromcubes** shows it and lets you switch engines. Without
+this add-on the core serves portals with no generated stylesheet.
 
 ## Limitations
 

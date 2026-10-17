@@ -30,9 +30,13 @@
  *      — the administrator's word; the editor shows it locked.
  *   2. The choice made in the editor (Settings → Fromcubes), persisted in
  *      `<userDir>/fromcubes/providers.json`.
- *   3. The defaults, `headers` and `tailwind` — names, not code: when their
- *      add-on is not installed the default is simply missing (identity:
- *      anonymous; css: unstyled), exactly like any other missing provider.
+ *   3. The default: the official add-on when it is installed — `headers`
+ *      from @aaqu/fromcubes-auth-headers, `tailwind` from
+ *      @aaqu/fromcubes-tailwind — and `none` when it is not. The core works
+ *      on its own; installing the add-on is what turns the feature on. Only
+ *      the official package counts here: another package registering a
+ *      plugin called `headers` never becomes the default identity provider
+ *      (it can still be chosen explicitly, in 1 or 2).
  * Installing a plugin never switches anything on its own — for identity that
  * would let a package change who counts as logged in.
  *
@@ -50,6 +54,7 @@ const API_VERSION = 1;
 
 const DEFAULT_IDENTITY = "headers";
 const DEFAULT_CSS = "tailwind";
+const NONE = "none";
 
 // Bounds on what a provider may hand us. Generous enough that anything the
 // built-in header parser produces passes untouched (its groups header is
@@ -68,8 +73,18 @@ const MAX_EDITOR_CLASS_LEN = 200;
 const USER_STRING_FIELDS = ["login", "displayName", "email", "role"];
 
 const KINDS = {
-  identity: { type: IDENTITY_TYPE, setting: "identityProvider", fallback: DEFAULT_IDENTITY },
-  css: { type: CSS_TYPE, setting: "cssEngine", fallback: DEFAULT_CSS },
+  identity: {
+    type: IDENTITY_TYPE,
+    setting: "identityProvider",
+    fallback: DEFAULT_IDENTITY,
+    fallbackModule: "@aaqu/fromcubes-auth-headers",
+  },
+  css: {
+    type: CSS_TYPE,
+    setting: "cssEngine",
+    fallback: DEFAULT_CSS,
+    fallbackModule: "@aaqu/fromcubes-tailwind",
+  },
 };
 
 // Provider ids travel through the settings file, the admin API and the
@@ -261,7 +276,24 @@ function createProviders(RED, opts = {}) {
       return { id: fromSettings, source: "settings" };
     }
     if (chosen[kind]) return { id: chosen[kind], source: "editor" };
-    return { id: k.fallback, source: "default" };
+    const official = pluginsOf(k.type).some(
+      (p) => p.id === k.fallback && p.module === k.fallbackModule,
+    );
+    return { id: official ? k.fallback : NONE, source: "default", addonMissing: !official };
+  }
+
+  /**
+   * Log once, at info level, why a kind runs on `none` by default — so a
+   * core installed on its own explains itself instead of failing quietly.
+   * @param {string} kind
+   * @param {string} msg
+   * @returns {void}
+   */
+  function explainNone(kind, msg) {
+    const key = "none:" + kind;
+    if (logged.has(key)) return;
+    logged.add(key);
+    if (RED.log.info) RED.log.info("[portal-react] " + msg);
   }
 
   /**
@@ -428,7 +460,15 @@ function createProviders(RED, opts = {}) {
    * @returns {Promise<Object|null>}
    */
   async function resolveUser(req) {
-    const id = identityId();
+    const cur = current("identity");
+    const id = cur.id;
+    // Called only for portals with Portal Auth on — so this is someone who
+    // expects users and gets none.
+    if (cur.addonMissing) {
+      explainNone("identity", "Portal Auth is on but no identity provider is installed, so every " +
+        "session is anonymous. For users from x-portal-user-* headers install " +
+        "@aaqu/fromcubes-auth-headers, or choose a provider in Settings → Fromcubes.");
+    }
     const { provider, error } = lookup(IDENTITY_TYPE, builtins.identity, id);
     if (!provider) {
       logOnce(error + " — every session is anonymous");
@@ -466,7 +506,12 @@ function createProviders(RED, opts = {}) {
    * @returns {Promise<{css: string}>}
    */
   async function generateCss(source) {
-    const id = cssEngineId();
+    const cur = current("css");
+    const id = cur.id;
+    if (cur.addonMissing) {
+      explainNone("css", "No CSS engine is installed, so portals are served without a stylesheet. " +
+        "For Tailwind CSS install @aaqu/fromcubes-tailwind.");
+    }
     const { provider, error } = lookup(CSS_TYPE, builtins.css, id);
     if (!provider) throw new Error(error);
     if (typeof provider.generate !== "function") {

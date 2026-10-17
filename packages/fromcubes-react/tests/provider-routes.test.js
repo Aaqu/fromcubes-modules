@@ -13,7 +13,7 @@ const { registerAdminApi } = require("../nodes/lib/admin-api");
 const { createProviders, IDENTITY_TYPE, CSS_TYPE, API_VERSION } = require("../nodes/lib/providers");
 
 // Stand-in for the tailwind add-on, so the default CSS engine exists.
-const TAILWIND = { id: "tailwind", type: CSS_TYPE, apiVersion: API_VERSION, module: "pkg", generate: () => ({ css: "" }) };
+const TAILWIND = { id: "tailwind", type: CSS_TYPE, apiVersion: API_VERSION, module: "@aaqu/fromcubes-tailwind", generate: () => ({ css: "" }) };
 
 let tmpDir;
 let app;
@@ -86,7 +86,8 @@ test("GET describes both kinds behind the read permission", async () => {
   build();
   const res = await request(app).get("/fromcubes-react/providers");
   expect(res.status).toBe(200);
-  expect(res.body.identity.selected).toBe("headers");
+  // No identity add-on in this harness: the default is the core's own `none`.
+  expect(res.body.identity.selected).toBe("none");
   expect(res.body.css.selected).toBe("tailwind");
   expect(gate.read).toContain("GET /fromcubes-react/providers");
 });

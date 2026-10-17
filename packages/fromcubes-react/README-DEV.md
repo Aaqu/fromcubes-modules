@@ -691,9 +691,11 @@ latest `<name>@<version>` tag, add-ons before the core.
   only *add* to `api` (and to the plugin contract, guarded at runtime by
   `apiVersion`); anything that breaks an add-on means a new `apiVersion` and
   a major core version, and every add-on's peer range moves with it.
-- **The core depends on the add-ons with `^x.y.z`** (transitional, so that
-  installing the core brings them). When an add-on releases a new minor
-  (`0.2.0`), raise the range in the core to ship it to core installs.
+- **The core depends on no add-on.** Installing it gives the core alone; a
+  feature whose add-on is missing runs on the core's `none` provider (see
+  `providers.js`). The defaults are the official add-ons *when installed* —
+  only packages named `@aaqu/fromcubes-auth-headers` /
+  `@aaqu/fromcubes-tailwind` count, never a look-alike plugin id.
 - Bump only the packages that changed. A change to `api` alone is a core
   release; an add-on that starts using something new from `api` raises the
   lower bound of its peer range.

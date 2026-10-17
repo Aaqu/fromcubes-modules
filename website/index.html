@@ -243,34 +243,35 @@
   <div class="wrap">
     <span class="step-tag"><span class="n">1</span> Install</span>
     <h2>Install the package in Node-RED</h2>
-    <p>Requires Node-RED ≥ 4 and Node.js ≥ 18.5. Two ways to install — pick one:</p>
-    <p style="margin-top:20px"><strong>Option A — Palette Manager (no terminal needed).</strong> In the editor open <strong>Menu → Manage palette → Install</strong>, search for <code>fromcubes-react</code> and click <em>install</em>.</p>
-    <p style="margin-top:26px"><strong>Option B — npm.</strong> Install into your Node-RED user directory (usually <code>~/.node-red</code>) and restart Node-RED:</p>
-    <pre>cd ~/.node-red
-npm install @aaqu/fromcubes-react
-<span class="c"># restart Node-RED afterwards</span></pre>
-
-    <h3 style="margin-top:34px">One install, four modules</h3>
-    <p><code>@aaqu/fromcubes-react</code> is the core. Three parts of it are separate add-on modules, and installing the core installs them too — you do not need to add them yourself:</p>
+    <p>Requires Node-RED ≥ 4 and Node.js ≥ 18.5.</p>
+    <p>The project is split into a <strong>core</strong> and <strong>add-ons</strong>. The core, <code>@aaqu/fromcubes-react</code>, is all you need to build portals; each add-on switches on one extra feature:</p>
     <div class="table-scroll"><table>
       <thead><tr><th>Module</th><th>What it adds</th></tr></thead>
       <tbody>
-        <tr><td><code>@aaqu/fromcubes-tailwind</code></td><td>Tailwind CSS 4 for portals, plus class completion in the editor</td></tr>
-        <tr><td><code>@aaqu/fromcubes-auth-headers</code></td><td>Portal users from <code>x-portal-user-*</code> headers set by a reverse proxy (Portal Auth)</td></tr>
+        <tr><td><code>@aaqu/fromcubes-react</code></td><td><strong>The core</strong> — the nodes, deploy-time bundling, live WebSocket data, the React Editor</td></tr>
+        <tr><td><code>@aaqu/fromcubes-tailwind</code></td><td>Tailwind CSS 4 for portals, plus class completion in the editor. <strong>This guide's example is styled with it.</strong></td></tr>
         <tr><td><code>@aaqu/fromcubes-assets</code></td><td>The <em>Portal Assets</em> sidebar: static files served at <code>/fromcubes/public/</code></td></tr>
+        <tr><td><code>@aaqu/fromcubes-auth-headers</code></td><td>Portal users from <code>x-portal-user-*</code> headers set by a reverse proxy (Portal Auth)</td></tr>
       </tbody>
     </table></div>
-    <p>After the restart all four are listed in <strong>Menu → Manage palette → Nodes</strong> — the core with its three nodes, each add-on as one plugin. Each one can be updated on its own from there.</p>
+    <p style="margin-top:16px">For this guide install the core and Tailwind; add the other two whenever you need them — each switches on by itself once installed. Two ways to install — pick one:</p>
+    <p style="margin-top:20px"><strong>Option A — Palette Manager (no terminal needed).</strong> In the editor open <strong>Menu → Manage palette → Install</strong>, search for <code>fromcubes</code> and click <em>install</em> on <code>@aaqu/fromcubes-react</code>, then on <code>@aaqu/fromcubes-tailwind</code>.</p>
+    <p style="margin-top:26px"><strong>Option B — npm.</strong> Install into your Node-RED user directory (usually <code>~/.node-red</code>) and restart Node-RED:</p>
+    <pre>cd ~/.node-red
+npm install @aaqu/fromcubes-react @aaqu/fromcubes-tailwind
+<span class="c"># optional: @aaqu/fromcubes-assets @aaqu/fromcubes-auth-headers</span>
+<span class="c"># restart Node-RED afterwards</span></pre>
+    <p style="margin-top:16px">Each installed module is listed on its own in <strong>Menu → Manage palette → Nodes</strong> — the core with its three nodes, each add-on as one plugin — and can be updated or removed there independently.</p>
     <figure>
       <a href="img/07-palette-modules.png"><img src="img/07-palette-modules.png" alt="Node-RED Manage palette, Nodes tab: @aaqu/fromcubes-react with 3 nodes, and @aaqu/fromcubes-assets, @aaqu/fromcubes-auth-headers, @aaqu/fromcubes-tailwind with 1 plugin each" loading="lazy"></a>
-      <figcaption>Manage palette → Nodes: the core and the three add-ons it brought along.</figcaption>
+      <figcaption>Manage palette → Nodes, with the core and all three add-ons installed.</figcaption>
     </figure>
-    <p style="margin-top:16px">Three new nodes appear in the palette under the <strong>fromcubes</strong> category: <code>portal react</code>, <code>react component</code> and <code>react utility</code>. <strong>Menu → Settings → Fromcubes</strong> shows which identity provider and CSS engine the portals use — <code>headers</code> and <code>tailwind</code> by default, so there is nothing to set:</p>
+    <p style="margin-top:16px">Three new nodes appear in the palette under the <strong>fromcubes</strong> category: <code>portal react</code>, <code>react component</code> and <code>react utility</code>. <strong>Menu → Settings → Fromcubes</strong> shows which identity provider and CSS engine the portals use — whatever add-on is installed, or <code>none</code> without one. There is nothing to set:</p>
     <figure>
       <a href="img/08-settings-fromcubes.png"><img src="img/08-settings-fromcubes.png" alt="Node-RED User Settings, Fromcubes tab: identity provider headers from @aaqu/fromcubes-auth-headers and CSS engine tailwind from @aaqu/fromcubes-tailwind are selected" loading="lazy"></a>
       <figcaption>Settings → Fromcubes: one identity provider and one CSS engine, each from its module.</figcaption>
     </figure>
-    <div class="callout" style="margin-top:22px"><strong>Coming from <code>@aaqu/fromcubes-portal-react</code>?</strong> That is the old name of the same package. Remove it in <em>Manage palette → Nodes</em> (or <code>npm uninstall @aaqu/fromcubes-portal-react</code>) before installing <code>@aaqu/fromcubes-react</code> — both register the same nodes. Your flows keep working unchanged.</div>
+    <div class="callout" style="margin-top:22px"><strong>Coming from <code>@aaqu/fromcubes-portal-react</code>?</strong> That old package contained the core and all three add-ons. Remove it in <em>Manage palette → Nodes</em> (or <code>npm uninstall @aaqu/fromcubes-portal-react</code>) — it registers the same nodes — then install <code>@aaqu/fromcubes-react</code> <em>and</em> the add-ons you used (most likely all three, for the same features as before). Your flows keep working unchanged.</div>
   </div>
 </section>
 
