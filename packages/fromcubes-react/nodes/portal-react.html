@@ -1597,32 +1597,26 @@
 </script>
 
 <script type="text/html" data-help-name="fc-portal-component">
+  <p>A React component every portal can use as a tag.</p>
+
+  <h3>Details</h3>
   <p>
-    Defines a shared JSX component available to all
-    <strong>portal-react</strong> nodes.
+    Write the component in <b>JSX Code</b> and give its name in
+    <b>JSX Tag</b>. After deploy, any <b>React Portal</b> uses it as
+    <code>&lt;Name /&gt;</code>, without imports. Components can use each
+    other and <code>useNodeRed()</code>.
   </p>
+  <pre>function Badge({ label }) {
+  return &lt;span className="badge"&gt;{label}&lt;/span&gt;;
+}</pre>
+
   <h3>Properties</h3>
   <dl>
     <dt>JSX Tag</dt>
-    <dd>
-      The name used as a JSX tag in portal-react pages (e.g.
-      <code>&lt;MyComponent /&gt;</code>).
-    </dd>
-    <dt>Input fields</dt>
-    <dd>Comma-separated list of expected input props (documentation only).</dd>
-    <dt>Output fields</dt>
-    <dd>Comma-separated list of output props (documentation only).</dd>
+    <dd>The component's name, starting with a capital letter (<code>Badge</code>).</dd>
     <dt>JSX Code</dt>
-    <dd>
-      The component function. Use <code>useNodeRed()</code> for data binding.
-    </dd>
+    <dd>The component function.</dd>
   </dl>
-  <h3>Usage</h3>
-  <p>
-    Place this node on the canvas, set the JSX tag name and code, then deploy.
-    All <strong>portal-react</strong> nodes will automatically have access to
-    this component.
-  </p>
 </script>
 
 <!-- ============================================================
@@ -1843,57 +1837,28 @@
 </script>
 
 <script type="text/html" data-help-name="fc-portal-utility">
+  <p>Shared JavaScript — helpers, hooks, constants — for every portal.</p>
+
+  <h3>Details</h3>
   <p>
-    Defines shared <strong>helpers</strong>, <strong>custom hooks</strong> and
-    <strong>constants</strong> available to all <strong>portal-react</strong>
-    nodes. Unlike <code>fc-portal-component</code>, the code is injected raw at
-    top level (no IIFE wrapper) — a single utility node may declare many symbols.
+    Declare any number of functions, constants or classes in <b>Code</b>.
+    Portals and components use them by name, without imports. A portal only
+    includes this node if it uses something from it.
   </p>
+  <pre>function clamp(n, min, max) {
+  return Math.max(min, Math.min(max, n));
+}</pre>
+
   <h3>Properties</h3>
   <dl>
     <dt>Module name</dt>
     <dd>
-      Identifier for this utility node. Shares a namespace with
-      <code>fc-portal-component</code> names — must be unique across all
-      components and utilities.
+      A name for this node; it must not repeat a component's or another
+      utility's name.
     </dd>
     <dt>Code</dt>
-    <dd>
-      Top-level JavaScript: <code>const</code>, <code>let</code>,
-      <code>function</code>, <code>class</code> declarations. <code>import</code>
-      statements at the top are auto-hoisted into the bundle.
-    </dd>
+    <dd>Top-level declarations; <code>import</code> lines are allowed.</dd>
   </dl>
-  <h3>Selective inclusion</h3>
-  <p>
-    A utility node is bundled into a portal only when the portal's JSX (or any
-    of its referenced library components) mentions at least one of the symbols
-    declared in the utility. Unused utility nodes are skipped.
-  </p>
-  <p>
-    Group related symbols in one node — referencing any one symbol pulls in the
-    whole node's code. Split unrelated helpers across multiple nodes for finer
-    granularity.
-  </p>
-  <h3>Example</h3>
-  <pre>function clamp(n, min, max) { return Math.max(min, Math.min(max, n)); }
-
-function useDebounce(value, ms = 300) {
-  const [v, setV] = React.useState(value);
-  React.useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
-}</pre>
-  <p>
-    Then in any <strong>portal-react</strong> node:
-  </p>
-  <pre>function App() {
-  const { data } = useNodeRed();
-  const slow = useDebounce(data?.value);
-  return &lt;div&gt;{clamp(slow ?? 0, 0, 100)}&lt;/div&gt;;
-}</pre>
 </script>
 
 <!-- ============================================================
@@ -2700,125 +2665,86 @@ function useDebounce(value, ms = 300) {
      Help
      ============================================================ -->
 <script type="text/html" data-help-name="portal-react">
-  <h3>Quick Reference</h3>
-  <ul>
-    <li><code>useNodeRed()</code> &rarr; <code>{ data, send, user, portalClient }</code></li>
-    <li>Components from <code>fc-portal-component</code> nodes are auto-imported</li>
-    <li>Must export <code>&lt;App /&gt;</code></li>
-    <li>JSX is transpiled server-side at deploy</li>
-  </ul>
-
   <p>
-    Renders a React 19 application on a configurable HTTP endpoint with live
-    WebSocket data binding. JSX is transpiled <strong>server-side at deploy
-    time</strong> using esbuild — browsers receive pre-compiled JS with zero
-    runtime compilation. Tailwind CSS 4 utility classes are generated
-    server-side and served as static CSS.
+    A React page served at <code>/fromcubes/&lt;sub-path&gt;</code>, kept live
+    with data from the flow.
   </p>
 
   <h3>Inputs</h3>
-  <p>
-    <code>msg.payload</code> is pushed via WebSocket. Set <code>msg._client</code>
-    to target specific clients, or omit it to broadcast to all.
-  </p>
-  <pre>
-const { data, send, user, portalClient } = useNodeRed();
-// data         = last msg.payload (reactive)
-// send(payload, topic?) — emit msg on output wire
-// user         = portal auth data or null
-// portalClient = unique session/tab ID (assigned by server)</pre
-  >
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">any</span></dt>
+    <dd>Sent to the open pages; read it with <code>useNodeRed().data</code>.</dd>
+    <dt class="optional">_client <span class="property-type">object</span></dt>
+    <dd>
+      Who gets it: <code>{ portalClient }</code> one browser tab,
+      <code>{ userId }</code> every tab of one user,
+      <code>{ authenticated: true }</code> every logged-in visitor.
+      Without it, every open page.
+    </dd>
+  </dl>
 
   <h3>Outputs</h3>
+  <dl class="message-properties">
+    <dt>payload <span class="property-type">any</span></dt>
+    <dd>What the page passed to <code>send(payload, topic)</code>.</dd>
+    <dt>_client <span class="property-type">object</span></dt>
+    <dd>The tab and user it came from — send a reply back with it.</dd>
+  </dl>
+
+  <h3>Details</h3>
   <p>
-    <code>send(payload, topic?)</code> emits a <code>msg</code> on the node's
-    output wire via WebSocket.
+    Write a <code>function App()</code> in the <b>JSX</b> tab. It is compiled
+    when you deploy, so the browser gets ready-made JavaScript.
+  </p>
+  <pre>function App() {
+  const { data, send } = useNodeRed();
+  return &lt;button onClick={() =&gt; send("hi")}&gt;{data}&lt;/button&gt;;
+}</pre>
+  <p>
+    <code>useNodeRed()</code> gives <code>data</code> (the last payload,
+    <code>null</code> until one arrives), <code>send</code>, <code>user</code>
+    (the visitor, or <code>null</code>) and <code>portalClient</code> (this
+    tab's id).
+  </p>
+  <p>
+    <b>React Component</b> and <b>React Utility</b> nodes can be used here by
+    name, without imports.
   </p>
 
-  <h3>npm Packages</h3>
-  <p>
-    Add npm packages in the <strong>Modules</strong> list (e.g.
-    <code>chart.js/auto@^4.4.0</code>, <code>d3</code>, <code>three</code>).
-    Node-RED auto-installs them at deploy time. All packages are bundled with
-    React into a single vendor IIFE via esbuild, cached by hash of installed
-    versions. Use them in JSX via standard imports.
-  </p>
+  <h3>Properties</h3>
+  <dl>
+    <dt>Sub-path</dt>
+    <dd>Where the page lives: <code>sensors</code> → <code>/fromcubes/sensors</code>.</dd>
+    <dt>Title</dt>
+    <dd>The browser tab's title.</dd>
+    <dt>Modules</dt>
+    <dd>
+      npm packages to use in the code (<code>chart.js/auto</code>,
+      <code>d3</code>, <code>three</code>); installed on deploy, then
+      <code>import</code> them.
+    </dd>
+    <dt>Enable Portal Auth headers</dt>
+    <dd>
+      Identify visitors with the identity provider chosen in
+      <b>Settings → Fromcubes</b>. Off: everyone is anonymous.
+    </dd>
+    <dt>Authenticated-only delivery</dt>
+    <dd>
+      Messages without <code>_client</code> go to logged-in visitors only;
+      <code>_client = { authenticated: false }</code> still reaches everyone.
+    </dd>
+    <dt>Show WebSocket status indicator</dt>
+    <dd>A small connected/disconnected badge in the page's corner.</dd>
+    <dt>Head HTML</dt>
+    <dd>Extra tags for the page's <code>&lt;head&gt;</code>, such as fonts or stylesheets.</dd>
+  </dl>
 
-  <h3>Deploy behavior</h3>
-  <ul>
-    <li>
-      Each deploy re-transpiles JSX via esbuild and rebuilds Tailwind CSS
-      (both cached by content hash — unchanged code is instant)
-    </li>
-    <li>
-      Vendor bundle (React + npm packages) rebuilt only when package versions
-      change
-    </li>
-    <li>
-      Active WebSocket clients receive close code 1001 and auto-reconnect
-      (exponential backoff)
-    </li>
-    <li>
-      Stale HTTP routes and WS handlers are cleaned up before new ones register
-    </li>
-    <li>
-      Transpile errors show in node status and as an error page on the endpoint
-    </li>
-  </ul>
-
-  <h3>Shared Components</h3>
+  <h3>Styling</h3>
   <p>
-    Components defined in <strong>fc-portal-component</strong> nodes on the
-    canvas are auto-injected into every portal-react page. Use them as JSX tags
-    by their component name — no imports needed.
-  </p>
-
-  <h3>Portal Auth</h3>
-  <p>
-    When enabled in the Auth tab, reads <code>X-Portal-*</code> headers set by
-    a reverse proxy (e.g. Nginx) and exposes user data:
-  </p>
-  <ul>
-    <li><code>useNodeRed()</code> returns <code>{ data, send, user, portalClient }</code></li>
-    <li>
-      All WebSocket messages include <code>msg._client</code> with
-      <code>{ portalClient, ...userFields }</code>
-    </li>
-    <li>
-      To target a specific tab: keep <code>msg._client</code> (or set
-      <code>msg._client = { portalClient: "..." }</code>)
-    </li>
-    <li>
-      To target all tabs of a user: set
-      <code>msg._client = { userId: "..." }</code> (no portalClient)
-    </li>
-    <li>
-      To target every authenticated session (skips anonymous):
-      <code>msg._client = { authenticated: true }</code>
-    </li>
-    <li>
-      To broadcast to all: remove <code>msg._client</code>. With
-      <b>Authenticated-only delivery</b> enabled this defaults to the
-      authenticated sessions instead; force a true broadcast with
-      <code>msg._client = { authenticated: false }</code>
-    </li>
-  </ul>
-
-  <h3>Custom Head HTML</h3>
-  <p>
-    Inject CDN links, fonts, or extra stylesheets into
-    <code>&lt;head&gt;</code>. This is raw trusted-author HTML; scripts and
-    event handlers run in the public portal page. Example:
-  </p>
-  <pre>
-&lt;link href="https://fonts.googleapis.com/css2?family=Inter&amp;display=swap" rel="stylesheet"&gt;</pre
-  >
-
-  <h3>WebSocket Status</h3>
-  <p>
-    Optional <em>fromcubes</em> badge in the bottom-right corner showing
-    connection state. Enable via the <strong>Show WebSocket status
-    indicator</strong> checkbox (off by default).
+    The page's stylesheet comes from the CSS engine chosen in
+    <b>Settings → Fromcubes</b>. Install <code>@aaqu/fromcubes-tailwind</code>
+    to style with Tailwind CSS classes; without a CSS engine the page has no
+    generated stylesheet.
   </p>
 </script>
 
