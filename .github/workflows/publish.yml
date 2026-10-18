@@ -79,13 +79,14 @@ jobs:
               else
                 TAG=latest
               fi
-              # The registry can lag a few minutes behind a publish, so `npm view`
-              # may miss a version that is already there; npm then refuses with
-              # "cannot publish over the previously published versions". That
-              # means done, not failed.
+              # The registry can lag behind a publish — minutes, once over an
+              # hour — so `npm view` may miss a version that is already there;
+              # npm then refuses with "cannot publish over the previously
+              # published versions", or with 409 "previously staged version"
+              # while it is still processing one. Both mean done, not failed.
               if ! OUT=$(npm publish --workspace "packages/$DIR" --tag "$TAG" --provenance 2>&1); then
                 echo "$OUT"
-                if grep -q "previously published" <<<"$OUT"; then
+                if grep -qE "previously (published|staged)" <<<"$OUT"; then
                   echo "$PREFIX $VERSION: already on npm (registry lagging), releasing on GitHub only"
                 else
                   exit 1
@@ -99,6 +100,43 @@ jobs:
             printf '%s %s %s\n' "$DIR" "$PREFIX@$VERSION" "$PREV_TAG" >> released.txt
           done
           echo "count=$(wc -l < released.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
+
+      # flows.nodered.org (the Node-RED catalogue, and the Palette Manager's
+      # source) notices new versions on its own only eventually; its "add a
+      # node" form makes it fetch the package now. It reads from npm, so wait
+      # until the version is visible there first. Best effort: the catalogue
+      # being down or changing its form must never fail a release.
+      - name: Refresh flows.nodered.org
+        if: steps.publish.outputs.count != '0'
+        continue-on-error: true
+        run: |
+          DEADLINE=$((SECONDS + 600))
+          while read -r DIR TAG PREV; do
+            NAME=$(jq -r .name "packages/$DIR/package.json")
+            VERSION=${TAG##*@}
+            until npm view "$NAME@$VERSION" version >/dev/null 2>&1 </dev/null; do
+              if [ "$SECONDS" -ge "$DEADLINE" ]; then
+                echo "::notice::$NAME@$VERSION not visible on npm yet, refreshing anyway"
+                break
+              fi
+              sleep 20
+            done
+            JAR=$(mktemp)
+            CSRF=$(curl -fsS -c "$JAR" -b "$JAR" https://flows.nodered.org/add/node </dev/null \
+              | sed -n 's/.*id="add-node-csrf"[^>]*value="\([^"]*\)".*/\1/p')
+            if [ -z "$CSRF" ]; then
+              echo "::warning::$NAME: no CSRF token on flows.nodered.org/add/node, skipped"
+              continue
+            fi
+            if RESP=$(curl -sS -w ' (HTTP %{http_code})' -c "$JAR" -b "$JAR" \
+                -H 'Referer: https://flows.nodered.org/add/node' \
+                --data-urlencode "module=$NAME" --data-urlencode "_csrf=$CSRF" \
+                https://flows.nodered.org/add/node </dev/null 2>&1) && [[ "$RESP" == *"(HTTP 2"* ]]; then
+              echo "$NAME@$VERSION: $RESP"
+            else
+              echo "::warning::$NAME: flows.nodered.org refresh failed: $RESP"
+            fi
+          done < released.txt
 
       - name: Collect release notes
         if: steps.publish.outputs.count != '0'

@@ -1,12 +1,27 @@
 <!-- ============================================================
      Portal Code Workspace — sidebar tab + full-screen editor overlay.
-     Served from nodes/editor/ via the /fromcubes-react/editor admin route.
+     Served from nodes/editor/ via the /fromcubes-react/<version>/editor admin route.
      ============================================================ -->
-<link rel="stylesheet" href="fromcubes-react/editor/workspace.css" />
-<script type="text/javascript" src="fromcubes-react/editor/file-tree.js"></script>
-<script type="text/javascript" src="fromcubes-react/editor/workspace.js"></script>
-<script type="text/javascript" src="fromcubes-react/editor/format.js"></script>
-<script type="text/javascript" src="fromcubes-react/editor/provider-settings.js"></script>
+<script type="text/javascript">
+  // Loaded from the versioned asset path the runtime exports (ASSET_BASE in
+  // lib/admin-api.js), so no cache — browser, CDN or proxy — can serve this
+  // template an older file, or a 404 it remembered. Execution order follows
+  // insertion order (async = false); every script waits for what it needs.
+  (function () {
+    const base = (RED.settings && RED.settings.portalReactAssetBase) || "fromcubes-react/";
+    window.__fcAssetBase = base;
+    const link = document.createElement("link");
+    link.rel = "stylesheet";
+    link.href = base + "editor/workspace.css";
+    document.head.appendChild(link);
+    ["file-tree.js", "workspace.js", "format.js", "provider-settings.js"].forEach(function (file) {
+      const s = document.createElement("script");
+      s.src = base + "editor/" + file;
+      s.async = false;
+      document.head.appendChild(s);
+    });
+  })();
+</script>
 
 <!-- ============================================================
      Shared: Monaco loader (used by both node editors)
@@ -1041,10 +1056,11 @@
         return;
       }
       const s = document.createElement("script");
-      s.src = "fromcubes-react/vs/loader.js";
+      const base = window.__fcAssetBase || "fromcubes-react/";
+      s.src = base + "vs/loader.js";
       s.onload = function () {
         console.log(PREFIX, "loader.js loaded, configuring require paths");
-        require.config({ paths: { vs: "fromcubes-react/vs" } });
+        require.config({ paths: { vs: base + "vs" } });
         require(["vs/editor/editor.main"], function () {
           console.log(PREFIX, "editor.main loaded");
           ensureJsxSetup();

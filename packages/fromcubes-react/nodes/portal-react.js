@@ -1629,12 +1629,17 @@ module.exports = function (RED) {
     }); // end setImmediate
   }
 
+  const { registerAdminApi, ASSET_BASE } = require("./lib/admin-api");
   RED.nodes.registerType("portal-react", PortalReactNode, {
     dynamicModuleList: "libs",
+    // Read by portal-react.html to load the editor assets from their
+    // versioned path (see ASSET_BASE in lib/admin-api.js).
+    settings: {
+      portalReactAssetBase: { value: ASSET_BASE, exportable: true },
+    },
   });
 
   const express = loadExpress();
-  const { registerAdminApi } = require("./lib/admin-api");
   registerAdminApi(RED, {
     express,
     permRead: PERM_READ,

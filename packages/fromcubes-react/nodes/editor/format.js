@@ -13,7 +13,7 @@
   "use strict";
 
   const PREFIX = "[FC-Format]";
-  const BASE = "fromcubes-react/prettier/";
+  const BASE = (window.__fcAssetBase || "fromcubes-react/") + "prettier/";
   // UMD builds: each sets window.prettier / window.prettierPlugins.
   const SCRIPTS = [
     "standalone.js",

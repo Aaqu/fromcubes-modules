@@ -7,7 +7,7 @@
  * module is a pair of pure functions so it can be unit-tested under vitest and
  * still be loaded as a plain browser script by the Node-RED editor.
  *
- * Loaded in the browser via `<script src="fromcubes-react/editor/file-tree.js">`
+ * Loaded in the browser by the asset loader in portal-react.html (`<base>/editor/file-tree.js`)
  * (exposes `window.__fcFileTree`) and in tests via `require()`.
  */
 (function (root, factory) {
