@@ -1,7 +1,7 @@
 /**
  * Add-on: CSS engine "tailwind" — Tailwind CSS 4 utilities generated
- * server-side at deploy (css.js), with the class list for editor completion
- * (candidates.js).
+ * server-side at deploy (css.js), with what the editor needs to complete and
+ * explain classes the way Tailwind CSS IntelliSense does (candidates.js).
  *
  * A Node-RED plugin, loaded by Node-RED itself (package.json → node-red →
  * plugins). The core (@aaqu/fromcubes-react) finds it by type through
@@ -10,17 +10,24 @@
 
 const { CSS_TYPE, API_VERSION } = require("@aaqu/fromcubes-react/api");
 const { generateCSS } = require("./css");
-const { generateCandidates } = require("./candidates");
+const { generateCandidates, completionData, describeCandidates } = require("./candidates");
+const { canonicalizer } = require("./canonical");
 
 const provider = {
   type: CSS_TYPE,
   apiVersion: API_VERSION,
   label: "Tailwind CSS 4 utility classes",
   generate: (source) => generateCSS(source),
-  editor: { classes: () => generateCandidates() },
+  editor: {
+    // Plain names, for cores that know only this.
+    classes: () => generateCandidates(),
+    completions: () => completionData(),
+    describe: (candidates) => describeCandidates(candidates),
+  },
 };
 
 module.exports = function (RED) {
+  canonicalizer.setLog((msg) => RED.log.warn("[fromcubes-tailwind] " + msg));
   RED.plugins.registerPlugin("tailwind", provider);
 };
 

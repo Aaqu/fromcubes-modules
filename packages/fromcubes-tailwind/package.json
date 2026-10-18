@@ -1,7 +1,7 @@
 {
   "name": "@aaqu/fromcubes-tailwind",
   "version": "0.1.1",
-  "description": "Fromcubes CSS engine: Tailwind CSS 4 generated server-side, with editor class completion",
+  "description": "Fromcubes CSS engine: Tailwind CSS 4 generated server-side, with editor class completion as in Tailwind CSS IntelliSense",
   "type": "commonjs",
   "keywords": [
     "node-red",
@@ -19,13 +19,21 @@
     "tailwind.js",
     "css.js",
     "candidates.js",
+    "intellisense.js",
+    "canonical.js",
+    "canonical-worker.js",
     "README.md",
-    "LICENSE"
+    "LICENSE",
+    "THIRD-PARTY-NOTICES.md"
   ],
   "engines": {
     "node": ">=18.5"
   },
   "dependencies": {
+    "@csstools/css-calc": "^2.1.4",
+    "@csstools/css-parser-algorithms": "^3.0.5",
+    "@csstools/css-tokenizer": "^3.0.4",
+    "culori": "^4.0.2",
     "tailwindcss": "^4.3.3"
   },
   "peerDependencies": {
