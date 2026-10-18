@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-react",
-  "version": "0.2.1",
+  "version": "0.2.2",
   "description": "Fromcubes React - React portals for Node-RED, built at deploy, with live WebSocket data binding",
   "type": "commonjs",
   "keywords": [
@@ -9,7 +9,6 @@
     "portal",
     "jsx",
     "react",
-    "tailwind",
     "websocket",
     "fromcubes"
   ],

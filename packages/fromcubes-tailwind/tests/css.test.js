@@ -3,7 +3,7 @@
  */
 
 const { generateCSS } = require("../css");
-const { generateCandidates } = require("../candidates");
+const { generateCandidates, getDesignSystem } = require("../candidates");
 
 describe("generateCSS — arbitrary-value candidates", () => {
   it("emits CSS for calc() arbitrary value", async () => {
@@ -65,9 +65,29 @@ describe("generateCSS — arbitrary-value candidates", () => {
   });
 });
 
-test("candidate list is non-trivial and unique", () => {
-  const list = generateCandidates();
-  expect(list.length).toBeGreaterThan(1000);
+test("candidate list is Tailwind's own, unique", { timeout: 30000 }, async () => {
+  const list = await generateCandidates();
+  const ds = await getDesignSystem();
+  expect(list).toEqual(ds.getClassList().map(([name]) => name));
+  expect(list.length).toBeGreaterThan(20000);
   expect(new Set(list).size).toBe(list.length);
   expect(list).toContain("p-4");
+});
+
+test("every listed class builds CSS", async () => {
+  const list = await generateCandidates();
+  const ds = await getDesignSystem();
+  const css = ds.candidatesToCss(list);
+  expect(list.filter((_, i) => !css[i])).toEqual([]);
+  // A sample of what the old hand-kept v3 list missed or got wrong.
+  for (const c of ["bg-linear-to-r", "inset-shadow-sm", "text-shadow-lg", "mask-radial-from-50%", "field-sizing-content", "size-4", "shadow-2xs"]) {
+    expect(list).toContain(c);
+  }
+  // Offered by the old list, invalid in v4: they build nothing.
+  for (const c of ["leading-xs", "z-px", "p-tight", "text-1/2"]) {
+    expect(list).not.toContain(c);
+    expect(ds.candidatesToCss([c])[0]).toBeNull();
+  }
+  // v3 names v4 still builds but no longer suggests — nor does IntelliSense.
+  for (const c of ["bg-gradient-to-r", "flex-grow", "decoration-slice"]) expect(list).not.toContain(c);
 });

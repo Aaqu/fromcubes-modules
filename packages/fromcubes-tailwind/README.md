@@ -9,7 +9,15 @@ portals — a Node-RED plugin that registers the CSS engine `tailwind`.
 
 - At deploy, each portal's source is scanned for class names and only the
   utilities it uses are built — server-side, no CDN, no browser compiler.
-- In the editor, `className="…"` offers Tailwind classes as you type.
+- In the editor, `className="…"` completes the way
+  [Tailwind CSS IntelliSense](https://github.com/tailwindlabs/tailwindcss-intellisense)
+  does in VS Code, from Tailwind's own design system: every class and variant,
+  colour swatches, `/50`-style modifiers, and the generated CSS — with theme
+  values and pixel sizes — beside each suggestion and on hover. Colour squares
+  sit next to colour classes in the code (the picker rewrites arbitrary ones
+  like `bg-[#f00]`), and the same warnings appear, with quick fixes: classes
+  that set the same CSS (`p-2 p-4`) and classes with a canonical spelling
+  (`w-[16px]` → `w-4`).
 
 ## Install
 

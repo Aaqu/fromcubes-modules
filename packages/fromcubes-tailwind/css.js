@@ -17,6 +17,30 @@ const CANDIDATE_RE = /[a-zA-Z0-9_\-:.\/\[\]#%]+/g;
 const STRING_LITERAL_RE =
   /"([^"\\\n]*(?:\\.[^"\\\n]*)*)"|'([^'\\\n]*(?:\\.[^'\\\n]*)*)'|`([^`\\]*(?:\\.[^`\\]*)*)`/g;
 
+// The stylesheet every portal is built from. The editor's class list
+// (candidates.js) loads the same one, so it offers exactly what builds.
+const TW_INPUT = `@import 'tailwindcss';`;
+
+/**
+ * Resolve the `@import`s in TW_INPUT for Tailwind's compiler.
+ *
+ * @param {string} id
+ * @param {string} [base]
+ * @returns {Promise<{content: string, base: string}>}
+ */
+async function loadStylesheet(id, base) {
+  let resolved;
+  if (id === "tailwindcss") {
+    resolved = require.resolve("tailwindcss/index.css");
+  } else {
+    resolved = require.resolve(id, { paths: [base || __dirname] });
+  }
+  return {
+    content: fs.readFileSync(resolved, "utf8"),
+    base: path.dirname(resolved),
+  };
+}
+
 let twCompiled = null;
 /**
  * Lazily compile the Tailwind base stylesheet. Result is memoized at module
@@ -27,20 +51,7 @@ let twCompiled = null;
  */
 async function getTwCompiled() {
   if (twCompiled) return twCompiled;
-  twCompiled = await twCompile(`@import 'tailwindcss';`, {
-    loadStylesheet: async (id, base) => {
-      let resolved;
-      if (id === "tailwindcss") {
-        resolved = require.resolve("tailwindcss/index.css");
-      } else {
-        resolved = require.resolve(id, { paths: [base || __dirname] });
-      }
-      return {
-        content: fs.readFileSync(resolved, "utf8"),
-        base: path.dirname(resolved),
-      };
-    },
-  });
+  twCompiled = await twCompile(TW_INPUT, { loadStylesheet });
   return twCompiled;
 }
 
@@ -68,4 +79,4 @@ async function generateCSS(source) {
   return { css };
 }
 
-module.exports = { generateCSS, getTwCompiled };
+module.exports = { generateCSS, getTwCompiled, loadStylesheet, TW_INPUT };

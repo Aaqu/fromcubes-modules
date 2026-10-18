@@ -186,16 +186,53 @@ test("no providers dependency, no routes", async () => {
 
 test("GET /fromcubes-react/css-classes lists the engine in force, behind read permission", async () => {
   const providers = build();
+  const empty = (engine) => ({ engine, classes: [], colors: [], modifiers: [], classModifiers: [], variants: [], describe: false });
   let res = await request(app).get("/fromcubes-react/css-classes");
   expect(res.status).toBe(200);
-  // The TAILWIND stand-in has no editor.classes(), so the list is empty
-  // here; the real add-on's list is covered in providers.test.js.
-  expect(res.body).toEqual({ engine: "tailwind", classes: [] });
+  // The TAILWIND stand-in has no editor data, so the list is empty here;
+  // the real add-on's list is covered in providers.test.js.
+  expect(res.body).toEqual(empty("tailwind"));
   expect(gate.read).toContain("GET /fromcubes-react/css-classes");
 
   providers.select("css", "none");
   res = await request(app).get("/fromcubes-react/css-classes");
-  expect(res.body).toEqual({ engine: "none", classes: [] });
+  expect(res.body).toEqual(empty("none"));
+});
+
+test("GET /fromcubes-react/css-describe explains newline-separated candidates, behind read permission", async () => {
+  const seen = [];
+  const uno = {
+    id: "uno",
+    type: CSS_TYPE,
+    apiVersion: API_VERSION,
+    generate: () => ({ css: "" }),
+    editor: {
+      describe: (list) => {
+        seen.push(list);
+        return list.map((c) => (c === "p-4" ? { hover: ".p-4 {}", documentation: ".p-4 {}", detail: "padding: 1rem;", color: null } : null));
+      },
+    },
+  };
+  const providers = build({ plugins: [uno] });
+  providers.select("css", "uno");
+  const res = await request(app).get("/fromcubes-react/css-describe").query({ c: "p-4\nhover:[color:red]" });
+  expect(res.status).toBe(200);
+  expect(seen).toEqual([["p-4", "hover:[color:red]"]]);
+  expect(res.body).toEqual({
+    engine: "uno",
+    results: [{ hover: ".p-4 {}", documentation: ".p-4 {}", detail: "padding: 1rem;", color: null, rules: [], canonical: null }, null],
+  });
+  expect(gate.read).toContain("GET /fromcubes-react/css-describe");
+  expect(gate.rate).not.toContain("GET /fromcubes-react/css-describe");
+});
+
+test("GET /fromcubes-react/css-describe: 400 for a missing or malformed list", async () => {
+  build();
+  expect((await request(app).get("/fromcubes-react/css-describe")).status).toBe(400);
+  expect((await request(app).get("/fromcubes-react/css-describe?c=a&c=b")).status).toBe(400);
+  expect((await request(app).get("/fromcubes-react/css-describe").query({ c: "a b" })).status).toBe(400);
+  const many = Array.from({ length: 65 }, (_, i) => "c" + i).join("\n");
+  expect((await request(app).get("/fromcubes-react/css-describe").query({ c: many })).status).toBe(400);
 });
 
 test("the old /fromcubes-react/tw-classes route is gone", async () => {

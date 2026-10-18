@@ -204,7 +204,7 @@ function registerProviderRoutes(RED, deps) {
     res.json(providers.describe());
   });
 
-  // Completion list for className="…", from whichever CSS engine is in force.
+  // Completion data for className="…", from whichever CSS engine is in force.
   // `engine` lets the editor tell a stale list from a fresh one.
   RED.httpAdmin.get("/fromcubes-react/css-classes", permRead, async (_req, res) => {
     try {
@@ -212,6 +212,28 @@ function registerProviderRoutes(RED, deps) {
     } catch (e) {
       RED.log.error("[portal-react] css-classes: " + e.message);
       res.status(500).json({ error: "could not list classes" });
+    }
+  });
+
+  // What the editor shows for classes it has in hand: a completion's CSS,
+  // a hover, a modifier's swatch, whether a variant exists. `c` carries the
+  // candidates newline-separated — a class never holds whitespace, and one
+  // string sidesteps query-string array parsing.
+  RED.httpAdmin.get("/fromcubes-react/css-describe", permRead, async (req, res) => {
+    const c = req.query.c;
+    if (typeof c !== "string") {
+      res.status(400).json({ error: "expected class candidates in c" });
+      return;
+    }
+    try {
+      res.json(await providers.describeClasses(c.split("\n")));
+    } catch (e) {
+      if (e instanceof TypeError) {
+        res.status(400).json({ error: e.message });
+        return;
+      }
+      RED.log.error("[portal-react] css-describe: " + e.message);
+      res.status(500).json({ error: "could not describe classes" });
     }
   });
 
