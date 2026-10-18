@@ -344,7 +344,7 @@ test("formatting stands the TS formatter down only after Prettier loads", () => 
 
 test("the editor template loads the formatting plugin", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="fromcubes-react/editor/format.js"');
+  expect(html).toContain('"format.js"');
 });
 
 // ── Node icon ─────────────────────────────────────────────────
@@ -393,11 +393,42 @@ test("the Lucide notice ships with the package", () => {
 
 test("portal-react.html loads both editor scripts and the stylesheet", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="fromcubes-react/editor/file-tree.js"');
-  expect(html).toContain('src="fromcubes-react/editor/workspace.js"');
-  expect(html).toContain('href="fromcubes-react/editor/workspace.css"');
+  expect(html).toContain('["file-tree.js", "workspace.js", "format.js", "provider-settings.js"]');
+  expect(html).toContain('base + "editor/workspace.css"');
+  // In order: workspace.js needs file-tree.js, and dynamic scripts run as they
+  // finish unless told otherwise.
+  expect(html).toContain("s.async = false");
   // The overlay reuses the dialog's registry-name cache refresher.
   expect(html).toContain("window.__fcRefreshComponentNames = refreshComponentNames");
+});
+
+// ── Versioned asset path ──────────────────────────────────────
+
+test("editor assets are also served under the core's version", async () => {
+  const { ASSET_BASE } = require("../nodes/lib/admin-api");
+  const { version } = require("../package.json");
+  expect(ASSET_BASE).toBe("fromcubes-react/" + version + "/");
+  for (const p of [
+    "editor/file-tree.js",
+    "editor/workspace.js",
+    "editor/workspace.css",
+    "icons/fromcubes-react.svg",
+    "vs/loader.js",
+    "prettier/standalone.js",
+  ]) {
+    const res = await request(app).get("/" + ASSET_BASE + p);
+    expect(res.status, p).toBe(200);
+  }
+});
+
+test("no editor asset is loaded from an unversioned path", () => {
+  const read = (...p) => fs.readFileSync(path.join(__dirname, "..", "nodes", ...p), "utf8");
+  // Literal "fromcubes-react/<static dir>" only as the fallback base.
+  const hard = /["']fromcubes-react\/(editor|icons|vs|prettier)\b/;
+  for (const f of [["portal-react.html"], ["editor", "workspace.js"], ["editor", "format.js"]]) {
+    expect(read(...f), f.join("/")).not.toMatch(hard);
+  }
+  expect(read("portal-react.js")).toContain("portalReactAssetBase: { value: ASSET_BASE, exportable: true }");
 });
 
 // ── Settings → Fromcubes (provider choice) ────────────────────
@@ -411,7 +442,7 @@ test("serves the provider settings pane and portal-react.html loads it", async (
   expect(res.text).toContain('"fromcubes-react/providers"');
 
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('src="fromcubes-react/editor/provider-settings.js"');
+  expect(html).toContain('"provider-settings.js"');
 });
 
 test("portal page reloads on the server's identity-change frame", () => {

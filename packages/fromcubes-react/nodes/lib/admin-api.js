@@ -1,6 +1,22 @@
 const path = require("path");
 
 /**
+ * Editor assets are also served under a path carrying the core's version
+ * (`fromcubes-react/0.2.0/editor/…`), and the editor template loads them from
+ * there. Every cache in between — the browser, a CDN, a reverse proxy — keys
+ * on the path, so a new release can never be handed an old file, nor a 404
+ * remembered from a moment the route did not exist yet. Query strings are not
+ * enough: some caches ignore them. The unversioned paths stay for anything
+ * that still points at them.
+ */
+const ASSET_VERSION = String(require("../../package.json").version).replace(
+  /[^0-9A-Za-z.+-]/g,
+  "",
+);
+/** Relative to the admin root, as the editor needs it (no leading slash). */
+const ASSET_BASE = "fromcubes-react/" + ASSET_VERSION + "/";
+
+/**
  * Register editor/admin/public support routes for portal-react.
  *
  * This module intentionally owns only HTTP route registration. Runtime page
@@ -37,41 +53,36 @@ function registerAdminApi(RED, deps) {
     onProviderChange,
   } = deps;
 
+  /**
+   * Mount one static directory at both its plain and its versioned path.
+   * @param {string} name
+   * @param {string} dir
+   * @returns {void}
+   */
+  function serveStatic(name, dir) {
+    const files = express.static(dir);
+    RED.httpAdmin.use("/fromcubes-react/" + name, permRead, files);
+    RED.httpAdmin.use("/" + ASSET_BASE + name, permRead, files);
+  }
+
   // Since 0.56 monaco-editor has an `exports` map that hides package.json;
   // its CommonJS entry is min/vs/index.js, so the AMD build (loader.js and
   // editor/editor.main.js) sits in the same directory.
-  const monacoVsPath = path.dirname(require.resolve("monaco-editor"));
-  RED.httpAdmin.use(
-    "/fromcubes-react/vs",
-    permRead,
-    express.static(monacoVsPath),
-  );
+  serveStatic("vs", path.dirname(require.resolve("monaco-editor")));
 
   // Editor-side workspace plugin (tree + full-screen Monaco overlay). Served
   // as static files instead of being inlined into portal-react.html so the
   // node's editor template stays readable.
-  RED.httpAdmin.use(
-    "/fromcubes-react/editor",
-    permRead,
-    express.static(path.join(__dirname, "..", "editor")),
-  );
+  serveStatic("editor", path.join(__dirname, "..", "editor"));
 
   // The node icon doubles as the editor's status-bar mark. Serving the icons
   // directory here keeps one copy on disk and spares the client from having to
   // know the package name that Node-RED's own /icons route is keyed by.
-  RED.httpAdmin.use(
-    "/fromcubes-react/icons",
-    permRead,
-    express.static(path.join(__dirname, "..", "icons")),
-  );
+  serveStatic("icons", path.join(__dirname, "..", "icons"));
 
   // Prettier's browser builds, straight from node_modules — same arrangement
   // as Monaco at /fromcubes-react/vs. Nothing is fetched until someone formats.
-  RED.httpAdmin.use(
-    "/fromcubes-react/prettier",
-    permRead,
-    express.static(path.dirname(require.resolve("prettier/package.json"))),
-  );
+  serveStatic("prettier", path.dirname(require.resolve("prettier/package.json")));
 
   const CSS_HASH_RE = /^[a-f0-9]{1,64}$/;
   function findCssByHash(reqHash) {
@@ -235,4 +246,4 @@ function registerProviderRoutes(RED, deps) {
   );
 }
 
-module.exports = { registerAdminApi };
+module.exports = { registerAdminApi, ASSET_BASE };

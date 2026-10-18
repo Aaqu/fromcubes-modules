@@ -19,6 +19,8 @@
   const EDITOR_NAME = "React Editor";
   const FLUSH_DEBOUNCE_MS = 400;
   const MIN_TREE_WIDTH = 150;
+  // Versioned asset path set by portal-react.html (see ASSET_BASE in lib/admin-api.js).
+  const ASSET_BASE = window.__fcAssetBase || "fromcubes-react/";
 
   // ── Module state ────────────────────────────────────────────
 
@@ -636,7 +638,7 @@
    * @returns {void}
    */
   function injectIconSprite() {
-    $.ajax({ url: "fromcubes-react/editor/icons.svg", dataType: "text" })
+    $.ajax({ url: ASSET_BASE + "editor/icons.svg", dataType: "text" })
       .done(function (markup) {
         $("<div>")
           .attr("id", "fc-ws-icon-sprite")
@@ -1107,7 +1109,7 @@
     const brand = $("<div>").addClass("fc-ws-brand").appendTo(header);
     $("<img>")
       .addClass("fc-ws-mark-logo")
-      .attr("src", "fromcubes-react/editor/mark.svg")
+      .attr("src", ASSET_BASE + "editor/mark.svg")
       .attr("alt", "fromcubes")
       .appendTo(brand);
     // One word split by colour — wrapped so the lockup's gap sits between the
@@ -1471,7 +1473,7 @@
       });
     $("<img>")
       .addClass("fc-ws-statusbar-icon")
-      .attr("src", "fromcubes-react/icons/fromcubes-react.svg")
+      .attr("src", ASSET_BASE + "icons/fromcubes-react.svg")
       .attr("alt", "")
       .appendTo(el);
     $("<span>").text(EDITOR_NAME).appendTo(el);
