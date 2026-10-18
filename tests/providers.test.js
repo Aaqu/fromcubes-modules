@@ -615,26 +615,47 @@ describe("editorClasses()", () => {
     return { RED, p: createProviders(RED) };
   };
 
+  // A names-only engine: no colours, modifiers or variants.
+  const plainData = (engine, classes, describe = false) => ({
+    engine,
+    classes,
+    colors: classes.map(() => ""),
+    modifiers: [],
+    classModifiers: classes.map(() => -1),
+    variants: [],
+    describe,
+  });
+
   it("tailwind: the candidate list, computed once", async () => {
     twClasses.mockClear();
     const { p } = makeTw();
-    expect(await p.editorClasses()).toEqual({ engine: "tailwind", classes: ["p-4", "m-2"] });
+    expect(await p.editorClasses()).toEqual(plainData("tailwind", ["p-4", "m-2"]));
     await p.editorClasses();
     expect(twClasses).toHaveBeenCalledTimes(1);
   });
 
-  it("the real tailwind add-on ships its candidate list", async () => {
+  // The first call loads Tailwind's design system and colours ~23 000
+  // classes: well inside a second alone, slower beside parallel suites.
+  it("the real tailwind add-on ships Tailwind's own list, with swatches, modifiers and variants", { timeout: 30000 }, async () => {
     const { p } = make();
-    const { classes } = await p.editorClasses();
-    expect(classes.length).toBeGreaterThan(1000);
-    expect(classes).toContain("bg-red-500");
+    const data = await p.editorClasses();
+    expect(data.describe).toBe(true);
+    expect(data.classes.length).toBeGreaterThan(20000);
+    const at = (name) => data.classes.indexOf(name);
+    expect(data.colors[at("bg-red-500")]).toBe("#fb2c36");
+    expect(data.colors[at("p-4")]).toBe("");
+    expect(data.modifiers[data.classModifiers[at("bg-red-500")]]).toContain("50");
+    expect(data.classModifiers[at("p-4")]).toBe(-1);
+    // v3 leftovers the old hand-kept list offered are gone
+    for (const gone of ["bg-gradient-to-r", "p-tight", "flex-grow", "z-px"]) expect(data.classes).not.toContain(gone);
+    expect(data.variants.find((v) => v.name === "md")).toMatchObject({ detail: "@media (width >= 48rem /* 768px */)" });
   });
 
   it("none, unknown engine, or a plugin without editor: empty list", async () => {
     const plain = cssPlugin("plain", () => ({ css: "" }));
     for (const cssEngine of ["none", "ghost", "plain"]) {
       const { p } = makeTw({ plugins: [plain], settings: { cssEngine } });
-      expect(await p.editorClasses()).toEqual({ engine: cssEngine, classes: [] });
+      expect(await p.editorClasses()).toEqual(plainData(cssEngine, []));
     }
   });
 
@@ -645,9 +666,54 @@ describe("editorClasses()", () => {
     const { p } = makeTw({ plugins: [uno] });
     expect((await p.editorClasses()).classes).toEqual(["p-4", "m-2"]);
     p.select("css", "uno");
-    expect(await p.editorClasses()).toEqual({ engine: "uno", classes: ["uno-a"] });
+    expect(await p.editorClasses()).toEqual(plainData("uno", ["uno-a"]));
     p.select("css", "none");
     expect((await p.editorClasses()).classes).toEqual([]);
+  });
+
+  it("completions(): shared modifier lists, colours by position, validated variants", async () => {
+    const rich = cssPlugin("rich", () => ({ css: "" }), {
+      editor: {
+        classes: () => ["ignored"],
+        completions: () => ({
+          classes: [
+            { name: "bg-a", modifiers: ["0", "50"], color: "#ff0000" },
+            { name: "bg-b", modifiers: ["0", "50"], color: "rgba(0, 0, 255, 0.5)" },
+            { name: "p-1", color: "url(x)" },
+            { name: "has space" },
+            "plain",
+            { name: "bg-c", color: "currentColor", modifiers: ["bad mod", "75"] },
+          ],
+          variants: [
+            { name: "hover", values: [], detail: "@media (hover: hover) { &:hover }" },
+            { name: "group", isArbitrary: true, values: ["hover", "x y"], valueDetails: ["&:is(:where(.group):hover *)", "z"] },
+            { name: "bad name" },
+            "nope",
+          ],
+        }),
+      },
+    });
+    const { p } = makeTw({ plugins: [rich], settings: { cssEngine: "rich" } });
+    const data = await p.editorClasses();
+    expect(data.classes).toEqual(["bg-a", "bg-b", "p-1", "plain", "bg-c"]);
+    expect(data.colors).toEqual(["#ff0000", "rgba(0, 0, 255, 0.5)", "", "", "currentColor"]);
+    expect(data.modifiers).toEqual([["0", "50"], ["75"]]);
+    expect(data.classModifiers).toEqual([0, 0, -1, -1, 1]);
+    expect(data.variants).toEqual([
+      { name: "hover", values: [], hasDash: true, isArbitrary: false, detail: "@media (hover: hover) { &:hover }", valueDetails: [], failed: false },
+      { name: "group", values: ["hover"], hasDash: true, isArbitrary: true, detail: null, valueDetails: ["&:is(:where(.group):hover *)"], failed: false },
+    ]);
+    expect(data.describe).toBe(false);
+  });
+
+  it("completions() that throws or returns no classes array ⇒ empty list + warn", async () => {
+    const boom = cssPlugin("boom", () => ({ css: "" }), { editor: { completions: () => { throw new Error("nope"); } } });
+    const odd = cssPlugin("odd", () => ({ css: "" }), { editor: { completions: () => ({ classes: "p-4" }) } });
+    for (const id of ["boom", "odd"]) {
+      const { p, RED } = makeTw({ plugins: [boom, odd], settings: { cssEngine: id } });
+      expect((await p.editorClasses()).classes).toEqual([]);
+      expect(RED._logs.warn[0]).toMatch(new RegExp(`"${id}" editor\\.completions\\(\\)`));
+    }
   });
 
   it("filters plugin output: strings only, no blanks/whitespace/overlong, de-duplicated", async () => {
@@ -685,5 +751,83 @@ describe("editorClasses()", () => {
     expect((await p.editorClasses()).classes).toEqual(["v1"]);
     plugins[0] = cssPlugin("uno", () => ({ css: "" }), { editor: { classes: () => ["v2"] } });
     expect((await p.editorClasses()).classes).toEqual(["v2"]);
+  });
+});
+
+// ── describeClasses(): CSS, summary and colour of classes in hand ──
+
+describe("describeClasses()", () => {
+  it("the real tailwind add-on explains classes as IntelliSense does", { timeout: 30000 }, async () => {
+    const { p } = make();
+    const { engine, results } = await p.describeClasses(["p-4", "hover:bg-red-500", "nope-x"]);
+    expect(engine).toBe("tailwind");
+    expect(results[0]).toEqual({
+      hover: ".p-4 {\n  padding: calc(var(--spacing) * 4) /* 1rem = 16px */;\n}",
+      documentation: ".p-4 {\n  padding: calc(var(--spacing) * 4) /* 1rem = 16px */;\n}",
+      detail: "padding: 1rem /* 16px */;",
+      color: null,
+      rules: [{ properties: ["padding"], context: [] }],
+      canonical: null,
+    });
+    expect(results[1].color).toBe("#fb2c36");
+    expect(results[1].hover).toContain("@media (hover: hover)");
+    expect(results[2]).toBeNull();
+  });
+
+  it("rejects a malformed request with TypeError", async () => {
+    const { p } = make();
+    for (const bad of [[], "p-4", ["has space"], [5], Array.from({ length: 65 }, () => "p-4"), ["x".repeat(1001)]]) {
+      await expect(p.describeClasses(bad)).rejects.toThrow(TypeError);
+    }
+  });
+
+  it("an engine without describe(), or one that fails, answers null throughout", async () => {
+    const plain = cssPlugin("plain", () => ({ css: "" }));
+    const boom = cssPlugin("boom", () => ({ css: "" }), { editor: { describe: () => { throw new Error("nope"); } } });
+    for (const cssEngine of ["none", "plain", "boom"]) {
+      const { p } = make({ plugins: [plain, boom], settings: { cssEngine } });
+      expect(await p.describeClasses(["p-4", "m-2"])).toEqual({ engine: cssEngine, results: [null, null] });
+    }
+  });
+
+  it("keeps only bounded strings and drawable colours", async () => {
+    const odd = cssPlugin("odd", () => ({ css: "" }), {
+      editor: {
+        describe: () => [
+          { hover: "a", documentation: 5, detail: "x".repeat(100001), color: "javascript:alert(1)", extra: "dropped" },
+          "nope",
+        ],
+      },
+    });
+    const { p } = make({ plugins: [odd], settings: { cssEngine: "odd" } });
+    expect((await p.describeClasses(["a", "b"])).results).toEqual([
+      { hover: "a", documentation: null, detail: null, color: null, rules: [], canonical: null },
+      null,
+    ]);
+  });
+
+  it("keeps well-formed conflict rules and a canonical spelling", async () => {
+    const odd = cssPlugin("odd", () => ({ css: "" }), {
+      editor: {
+        describe: () => [
+          {
+            rules: [
+              { properties: ["padding"], context: ["@media (width >= 48rem)"] },
+              { properties: [5], context: [] },
+              { properties: ["x"] },
+              "nope",
+            ],
+            canonical: "w-4",
+          },
+          { rules: "padding", canonical: "has space" },
+        ],
+      },
+    });
+    const { p } = make({ plugins: [odd], settings: { cssEngine: "odd" } });
+    const [a, b] = (await p.describeClasses(["w-[16px]", "b"])).results;
+    expect(a.rules).toEqual([{ properties: ["padding"], context: ["@media (width >= 48rem)"] }]);
+    expect(a.canonical).toBe("w-4");
+    expect(b.rules).toEqual([]);
+    expect(b.canonical).toBeNull();
   });
 });

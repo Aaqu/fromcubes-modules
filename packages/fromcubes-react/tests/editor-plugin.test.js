@@ -69,6 +69,30 @@ test("serves the workspace plugin script", async () => {
   expect(res.text).toContain("fromcubes-react-editor");
 });
 
+test("serves the class-completion helper", async () => {
+  const res = await request(app).get("/fromcubes-react/editor/class-completion.js");
+  expect(res.status).toBe(200);
+  expect(res.text).toContain("completionsFromClassList");
+});
+
+test("className completion, resolve and hover run on the class-completion helper", () => {
+  const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
+  expect(html).toContain("registerHoverProvider(\"javascript\"");
+  expect(html).toContain("resolveCompletionItem");
+  expect(html).toContain('url: "fromcubes-react/css-describe"');
+  expect(html).toContain("window.__fcClassCompletion.TRIGGER_CHARACTERS");
+  // no second, hand-rolled matcher beside it
+  expect(html).not.toContain("cls.indexOf(word) === 0");
+  // diagnostics with quick fixes, and colour squares with the picker
+  expect(html).toContain('const CSS_MARKER_OWNER = "tailwindcss"');
+  expect(html).toContain("monaco.editor.setModelMarkers(");
+  expect(html).toContain('registerCodeActionProvider("javascript"');
+  expect(html).toContain('registerColorProvider("javascript"');
+  expect(html).toContain("monaco.editor.onDidCreateModel(watchCssModel)");
+  // a refetch of the engine data re-checks open models
+  expect(html).toContain("if (window.__fcRevalidateCss) window.__fcRevalidateCss();");
+});
+
 test("serves the file-tree helper and the stylesheet", async () => {
   const js = await request(app).get("/fromcubes-react/editor/file-tree.js");
   expect(js.status).toBe(200);
@@ -393,7 +417,7 @@ test("the Lucide notice ships with the package", () => {
 
 test("portal-react.html loads both editor scripts and the stylesheet", () => {
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
-  expect(html).toContain('["file-tree.js", "workspace.js", "format.js", "provider-settings.js"]');
+  expect(html).toContain('["file-tree.js", "class-completion.js", "workspace.js", "format.js", "provider-settings.js"]');
   expect(html).toContain('base + "editor/workspace.css"');
   // In order: workspace.js needs file-tree.js, and dynamic scripts run as they
   // finish unless told otherwise.

@@ -55,6 +55,33 @@ TORTIOUS ACTION, ARISING OUT OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF
 THIS SOFTWARE.
 ```
 
+## Tailwind CSS IntelliSense — `nodes/editor/class-completion.js`
+
+The editor's `className` completion is ported from
+[Tailwind CSS IntelliSense](https://github.com/tailwindlabs/tailwindcss-intellisense)
+(`packages/tailwindcss-language-service`): the class attribute lexer
+(`util/lexers.ts`, `util/find.ts`), comment stripping (`util/doc.ts`), variant
+parsing (`util/getVariantsFromClassName.ts`, `util/segment.ts`), the
+completion list itself (`completionProvider.ts`, `util/naturalExpand.ts`), the
+CSS-conflict and canonical-class diagnostics with their quick fixes
+(`diagnostics/`, `codeActions/`, `util/joinWithAnd.ts`,
+`util/removeRangesFromString.ts`), the colour squares
+(`documentColorProvider.ts`) and the colour picker's presentations (the
+language server's `onColorPresentation`), translated to plain JavaScript;
+departures from the original are marked in the code.
+
+```
+MIT License
+
+Copyright (c) Tailwind Labs, Inc.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+```
+
 ## Ark Pixel — `nodes/editor/ark-pixel.woff2`
 
 The editor's brand lockup is set in **Ark Pixel 10px proportional** by TakWolf,

@@ -172,7 +172,7 @@ function App() {
 ## Editor features
 
 - **Monaco** with full JSX support and `useNodeRed()` type declarations
-- **Tailwind CSS autocompletion** inside `className="..."` (~19k utility classes). Classes must be complete literals in a string — dynamic `bg-${tone}-500` generates no CSS (use a map of full classes). Arbitrary values incl. `w-[calc(100%-2rem)]`, `grid-cols-[repeat(2,1fr)]`, `mt-0!` and `@md:flex` are supported.
+- **Tailwind CSS IntelliSense** inside `className="..."`, as in VS Code (with `@aaqu/fromcubes-tailwind`): all ~23k Tailwind 4 classes and every variant, colour swatches, `/50` modifiers, the generated CSS beside each suggestion and on hover, colour squares in the code, and warnings with quick fixes for conflicting classes (`p-2 p-4`) and non-canonical ones (`w-[16px]` → `w-4`). Classes must be complete literals in a string — dynamic `bg-${tone}-500` generates no CSS (use a map of full classes). Arbitrary values incl. `w-[calc(100%-2rem)]`, `grid-cols-[repeat(2,1fr)]`, `mt-0!` and `@md:flex` are supported.
 - **JSX tag completion** — type tag name, Tab to expand
 - **Self-close collapse** — type `/` inside empty `<tag></tag>` to convert to `<tag />`
 - **Ctrl+D / Cmd+D** — duplicate the current line or selection (in every Monaco editor of the package)
@@ -327,6 +327,14 @@ portalReact: {
   every code editor; it is asked once per installed plugin. Without it the
   engine just gets no completion. Strings only, no whitespace, ≤ 200 chars,
   at most 50 000.
+- For the rest of the IntelliSense experience an engine may add
+  `editor.completions()` → `{ classes: [{ name, modifiers, color }], variants }`
+  (variants: `{ name, values, hasDash, isArbitrary, detail, valueDetails }`)
+  and `editor.describe(candidates)` → per class
+  `{ hover, documentation, detail, color, rules, canonical }` or `null` (CSS
+  for the detail pane and hover, colour as `#rrggbb` / `rgba(…)`, what the
+  conflict check compares, the canonical spelling). The Tailwind add-on is
+  the reference implementation.
 - An unknown provider name is logged once; for identity every session is then
   anonymous. The settings pane flags a selected provider whose package is gone.
 - Optional `label: "…"` on the plugin is shown next to its id in the settings

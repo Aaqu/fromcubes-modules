@@ -14,7 +14,7 @@
     link.rel = "stylesheet";
     link.href = base + "editor/workspace.css";
     document.head.appendChild(link);
-    ["file-tree.js", "workspace.js", "format.js", "provider-settings.js"].forEach(function (file) {
+    ["file-tree.js", "class-completion.js", "workspace.js", "format.js", "provider-settings.js"].forEach(function (file) {
       const s = document.createElement("script");
       s.src = base + "editor/" + file;
       s.async = false;
@@ -44,12 +44,13 @@
       quickSuggestions: { strings: true },
     };
 
-    // className="…" completion list, from the CSS engine in force (Settings →
-    // Fromcubes). Refetched every time a dialog or the React Editor opens and
+    // className="…" completion data, from the CSS engine in force (Settings →
+    // Fromcubes): classes with their swatch colours and modifiers, and the
+    // variants. Refetched every time a dialog or the React Editor opens and
     // after the engine changes — the engine can change while the editor is
     // open, so "load once" would keep offering the old engine's classes.
     window.__fcCssClasses = null;
-    window.__fcCssClassSet = null;
+    window.__fcCssData = null;
     window.__fcCssEngine = null;
     let cssClassesPending = false;
     window.__fcRefreshCssClasses = function () {
@@ -57,9 +58,24 @@
       cssClassesPending = true;
       $.getJSON("fromcubes-react/css-classes", function (data) {
         if (!data || !Array.isArray(data.classes)) return;
+        const prev = window.__fcCssData;
         window.__fcCssEngine = data.engine;
         window.__fcCssClasses = data.classes;
-        window.__fcCssClassSet = null;
+        window.__fcCssData = {
+          engine: data.engine,
+          classes: data.classes,
+          colors: data.colors || [],
+          modifiers: data.modifiers || [],
+          classModifiers: data.classModifiers || [],
+          variants: data.variants || [],
+          describe: data.describe === true,
+        };
+        // What the engine said about classes stays true while it is the same
+        // engine; a refetch on every dialog open must not ask again.
+        if (prev && prev.engine === data.engine && prev._described) {
+          Object.defineProperty(window.__fcCssData, "_described", { value: prev._described });
+        }
+        if (window.__fcRevalidateCss) window.__fcRevalidateCss();
       })
         .fail(function (xhr) {
           console.error("[FC-Monaco] css-classes FAILED:", xhr.status, xhr.statusText);
@@ -117,102 +133,355 @@
       console.log(PREFIX, "addExtraLib globals.d.ts");
       jsDef.addExtraLib(libContent, "file:///globals.d.ts");
 
-      // className completion provider — classes from the CSS engine in force
-      // Triggers in: className="...", className={`...`}, and any string literal
-      // containing at least one known TW class (e.g. "bg-red-500 text-white")
-      console.log(PREFIX, "registering Tailwind completion provider");
-      monaco.languages.registerCompletionItemProvider("javascript", {
-        triggerCharacters: ['"', "'", "`", " "],
-        provideCompletionItems: function (model, position) {
-          const line = model.getLineContent(position.lineNumber);
-          const before = line.substring(0, position.column - 1);
+      // className completion, hover and CSS preview — Tailwind CSS
+      // IntelliSense's logic (editor/class-completion.js) over the data of the
+      // CSS engine in force. Inside className="…" / className={…} it offers
+      // what IntelliSense offers: variants first (`hover:` reopens the list),
+      // then every class in the engine's order with colour swatches, and after
+      // `/` the class's modifiers. Strings elsewhere complete too once they
+      // hold a known class — this editor's addition.
+      console.log(PREFIX, "registering CSS class completion provider");
+      const cssKinds = {
+        variant: monaco.languages.CompletionItemKind.Module,
+        color: monaco.languages.CompletionItemKind.Color,
+        constant: monaco.languages.CompletionItemKind.Constant,
+      };
 
-          // 1) className="..." or className={`...`}
-          const isClassName =
-            before.match(/className\s*=\s*["'][^"']*$/) ||
-            before.match(/className\s*=\s*\{`[^`]*$/);
+      function cssData() {
+        const cc = window.__fcClassCompletion;
+        const data = window.__fcCssData;
+        if (!cc || !data || !data.classes.length) return null;
+        return cc.prepare(data);
+      }
 
-          // 2) Any open string literal: "..., '..., or `...
-          const inString = !isClassName && before.match(/["'`][^"'`]*$/);
-
-          if (!isClassName && !inString) return { suggestions: [] };
-
-          // Extract text inside the string
-          const raw = (isClassName || inString)[0];
-          let inside;
-          if (isClassName) {
-            inside = raw.replace(/^className\s*=\s*(?:\{`|["'])/, "");
-          } else {
-            inside = raw.substring(1); // skip opening quote
-          }
-          inside = inside.replace(/\$\{[^}]*\}/g, " ");
-          const parts = inside.split(/\s+/);
-          const word = parts[parts.length - 1] || "";
-
-          // For non-className strings, only activate if at least one existing
-          // token in the string looks like a TW class (avoid noise in random strings)
-          if (!isClassName && parts.length > 0) {
-            const classes = window.__fcCssClasses || [];
-            let twSet = window.__fcCssClassSet;
-            if (!twSet && classes.length) {
-              twSet = new Set(classes);
-              window.__fcCssClassSet = twSet;
-              console.log(PREFIX, "CSS: built class lookup Set, size=" + twSet.size);
-            }
-            if (twSet) {
-              let hasTwToken = false;
-              for (let p = 0; p < parts.length; p++) {
-                if (parts[p] && twSet.has(parts[p])) {
-                  hasTwToken = true;
-                  break;
-                }
-              }
-              // If typing the very first word, accept if it looks like a prefix
-              if (!hasTwToken && parts.length === 1 && word.length >= 2) {
-                for (let j = 0; j < classes.length; j++) {
-                  if (classes[j].indexOf(word) === 0) {
-                    hasTwToken = true;
-                    break;
+      // What the engine says about each candidate (CSS, summary, colour), or
+      // null — one request per batch, answers kept for the data's lifetime.
+      function describeCss(data, candidates) {
+        const cc = window.__fcClassCompletion;
+        const nulls = candidates.map(function () {
+          return null;
+        });
+        if (!data.describe) return Promise.resolve(nulls);
+        const cache = data._described;
+        const missing = candidates.filter(function (c, i) {
+          return !cache.has(c) && candidates.indexOf(c) === i;
+        });
+        const batches = [];
+        for (let i = 0; i < missing.length; i += cc.MAX_DESCRIBE) {
+          batches.push(missing.slice(i, i + cc.MAX_DESCRIBE));
+        }
+        return Promise.all(
+          batches.map(function (batch) {
+            return new Promise(function (resolve) {
+              $.ajax({
+                url: "fromcubes-react/css-describe",
+                data: { c: batch.join("\n") },
+                dataType: "json",
+                timeout: 5000,
+              })
+                .done(function (res) {
+                  if (res && Array.isArray(res.results) && res.engine === data.engine) {
+                    batch.forEach(function (c, i) {
+                      cache.set(c, res.results[i] || null);
+                    });
                   }
-                }
-              }
-              if (!hasTwToken) return { suggestions: [] };
-            }
-          }
+                })
+                .fail(function (xhr) {
+                  console.error(PREFIX, "css-describe FAILED:", xhr.status, xhr.statusText);
+                })
+                .always(resolve);
+            });
+          }),
+        ).then(function () {
+          return candidates.map(function (c) {
+            return cache.has(c) ? cache.get(c) : null;
+          });
+        });
+      }
 
-          const range = {
-            startLineNumber: position.lineNumber,
+      // A variant the data does not list by name (`group-hover/item`,
+      // `data-[open]`) is valid when the engine compiles it — IntelliSense's
+      // test, `<part>:[color:red]`.
+      function isValidVariant(data, part) {
+        if (!window.__fcClassCompletion.mayBeVariant(data, part)) return false;
+        return describeCss(data, [part + ":[color:red]"]).then(function (r) {
+          return !!r[0];
+        });
+      }
+
+      // Text the class-list scan needs: up to SEARCH_RANGE before the cursor,
+      // and the cursor's line split at the cursor.
+      function cssScanText(model, position) {
+        const cc = window.__fcClassCompletion;
+        const offset = model.getOffsetAt(position);
+        const from = model.getPositionAt(Math.max(0, offset - cc.SEARCH_RANGE));
+        const line = model.getLineContent(position.lineNumber);
+        return {
+          before: model.getValueInRange({
+            startLineNumber: from.lineNumber,
+            startColumn: from.column,
             endLineNumber: position.lineNumber,
-            startColumn: position.column - word.length,
             endColumn: position.column,
-          };
+          }),
+          lineBefore: line.substring(0, position.column - 1),
+          lineAfter: line.substring(position.column - 1),
+        };
+      }
 
-          const classes = window.__fcCssClasses || [];
-          const suggestions = [];
-          for (let i = 0; i < classes.length; i++) {
-            const cls = classes[i];
-            if (!word.length || cls.indexOf(word) === 0) {
-              suggestions.push({
-                label: cls,
-                kind: monaco.languages.CompletionItemKind.Value,
-                insertText: cls,
-                range: range,
-                sortText: cls.padStart(60, "0"),
+      function cssFence(css) {
+        return { value: "```css\n" + css + "\n```" };
+      }
+
+      monaco.languages.registerCompletionItemProvider("javascript", {
+        triggerCharacters: window.__fcClassCompletion
+          ? window.__fcClassCompletion.TRIGGER_CHARACTERS
+          : ['"', "'", "`", " ", ".", "(", "[", "]", "!", "/", "-", ":"],
+        provideCompletionItems: function (model, position, context) {
+          const data = cssData();
+          if (!data) return { suggestions: [] };
+          const cc = window.__fcClassCompletion;
+          const text = cssScanText(model, position);
+          const at = cc.classListAt(data, text.before, text.lineBefore);
+          if (!at) return { suggestions: [] };
+          const kinds = monaco.languages.CompletionTriggerKind;
+          const ctx = {
+            triggerKind:
+              context.triggerKind === kinds.Invoke
+                ? "invoke"
+                : context.triggerKind === kinds.TriggerCharacter
+                  ? "character"
+                  : "incomplete",
+            triggerCharacter: context.triggerCharacter,
+          };
+          return cc
+            .completionsFromClassList(data, at.classList, ctx, function (part) {
+              return isValidVariant(data, part);
+            })
+            .then(function (list) {
+              if (!list.modifiers) return list;
+              return describeCss(
+                data,
+                list.items.map(function (item) {
+                  return item.label;
+                }),
+              ).then(function (described) {
+                cc.applyModifierColors(list.items, described);
+                return list;
               });
+            })
+            .then(function (list) {
+              const range = {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: position.column + list.range.start,
+                endColumn: position.column + list.range.end,
+              };
+              const owner = { variants: list.variants, important: list.important };
+              const suggestions = list.items.map(function (item) {
+                const s = {
+                  label: item.label,
+                  kind: cssKinds[item.kind],
+                  insertText: item.insertText || item.label,
+                  sortText: item.sortText,
+                  range: range,
+                };
+                if (item.filterText) s.filterText = item.filterText;
+                if (item.detail) s.detail = item.detail;
+                if (item.documentation) s.documentation = item.documentation;
+                if (item.snippet) {
+                  s.insertTextRules = monaco.languages.CompletionItemInsertTextRule.InsertAsSnippet;
+                }
+                if (item.retrigger) s.command = { id: "editor.action.triggerSuggest", title: "" };
+                if (item.kind !== "variant") s.fcClassOwner = owner;
+                return s;
+              });
+              console.log(
+                PREFIX,
+                "CSS class completion: ctx=" +
+                  (at.attribute ? "attribute" : "string") +
+                  " items=" +
+                  suggestions.length,
+              );
+              return { suggestions: suggestions };
+            });
+        },
+        // The detail pane: the declarations on one line, and the CSS the
+        // class generates under the variants typed before it.
+        resolveCompletionItem: function (item) {
+          const data = cssData();
+          if (!data || !item.fcClassOwner || (item.detail && item.documentation)) return item;
+          const className = item.fcClassOwner.important ? "!" + item.label : item.label;
+          const full = item.fcClassOwner.variants.concat([className]).join(":");
+          return describeCss(data, [full, className]).then(function (r) {
+            const whole = r[0];
+            const base = r[1];
+            if (!whole) return item;
+            if (!item.detail) {
+              item.detail = /^\d+ rules$/.test(whole.detail || "") ? whole.detail : (base || whole).detail || undefined;
             }
-          }
-          console.log(
-            PREFIX,
-            "CSS class completion: ctx=" +
-              (isClassName ? "className" : "string") +
-              " word='" +
-              word +
-              "', matched=" +
-              suggestions.length +
-              "/" +
-              classes.length,
+            if (!item.documentation && whole.documentation) item.documentation = cssFence(whole.documentation);
+            return item;
+          });
+        },
+      });
+
+      monaco.languages.registerHoverProvider("javascript", {
+        provideHover: function (model, position) {
+          const data = cssData();
+          if (!data || !data.describe) return null;
+          const text = cssScanText(model, position);
+          const hit = window.__fcClassCompletion.classNameAt(data, text.before, text.lineBefore, text.lineAfter);
+          if (!hit) return null;
+          return describeCss(data, [hit.className]).then(function (r) {
+            if (!r[0] || !r[0].hover) return null;
+            return {
+              range: {
+                startLineNumber: position.lineNumber,
+                endLineNumber: position.lineNumber,
+                startColumn: position.column + hit.start,
+                endColumn: position.column + hit.end,
+              },
+              contents: [cssFence(r[0].hover)],
+            };
+          });
+        },
+      });
+
+      // Diagnostics, quick fixes and colour squares — IntelliSense's
+      // cssConflict and suggestCanonicalClasses warnings and its document
+      // colours, over every class attribute of every javascript model (node
+      // dialogs and the React Editor alike), rechecked as the code changes.
+      function cssRange(model, start, end) {
+        const a = model.getPositionAt(start);
+        const b = model.getPositionAt(end);
+        return { startLineNumber: a.lineNumber, startColumn: a.column, endLineNumber: b.lineNumber, endColumn: b.column };
+      }
+
+      function cssClassLists(model) {
+        const cc = window.__fcClassCompletion;
+        return cc.findClassListsInText(cc.jsWithoutComments(model.getValue()));
+      }
+
+      const CSS_MARKER_OWNER = "tailwindcss";
+      const cssDiagnostics = new WeakMap(); // model → diagnostics, for their quick fixes
+      const cssTimers = new WeakMap();
+
+      function validateCss(model) {
+        if (model.isDisposed() || model.getLanguageId() !== "javascript") return;
+        const data = cssData();
+        if (!data || !data.describe) {
+          cssDiagnostics.delete(model);
+          monaco.editor.setModelMarkers(model, CSS_MARKER_OWNER, []);
+          return;
+        }
+        const cc = window.__fcClassCompletion;
+        const version = model.getVersionId();
+        const lists = cssClassLists(model);
+        describeCss(data, cc.uniqueClassNames(lists)).then(function () {
+          if (model.isDisposed() || model.getVersionId() !== version || cssData() !== data) return;
+          const diagnostics = cc.diagnose(lists, data._described);
+          cssDiagnostics.set(model, diagnostics);
+          monaco.editor.setModelMarkers(
+            model,
+            CSS_MARKER_OWNER,
+            diagnostics.map(function (d) {
+              return Object.assign(cssRange(model, d.start, d.end), {
+                severity: d.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+                message: d.message,
+                source: "tailwindcss",
+                code: d.code,
+                relatedInformation: d.related.map(function (r) {
+                  return Object.assign(cssRange(model, r.start, r.end), { resource: model.uri, message: r.message });
+                }),
+              });
+            }),
           );
-          return { suggestions: suggestions };
+        });
+      }
+
+      function scheduleCssValidation(model) {
+        clearTimeout(cssTimers.get(model));
+        cssTimers.set(
+          model,
+          setTimeout(function () {
+            validateCss(model);
+          }, 400),
+        );
+      }
+
+      function watchCssModel(model) {
+        const changed = model.onDidChangeContent(function () {
+          scheduleCssValidation(model);
+        });
+        const language = model.onDidChangeLanguage(function () {
+          scheduleCssValidation(model);
+        });
+        model.onWillDispose(function () {
+          changed.dispose();
+          language.dispose();
+          clearTimeout(cssTimers.get(model));
+        });
+        scheduleCssValidation(model);
+      }
+
+      monaco.editor.getModels().forEach(watchCssModel);
+      monaco.editor.onDidCreateModel(watchCssModel);
+      // New engine data (a dialog opened, the engine switched): check again.
+      window.__fcRevalidateCss = function () {
+        monaco.editor.getModels().forEach(scheduleCssValidation);
+      };
+
+      monaco.languages.registerCodeActionProvider("javascript", {
+        provideCodeActions: function (model, _range, context) {
+          const diagnostics = cssDiagnostics.get(model) || [];
+          const actions = [];
+          context.markers.forEach(function (marker) {
+            if (marker.source !== "tailwindcss") return;
+            const start = model.getOffsetAt({ lineNumber: marker.startLineNumber, column: marker.startColumn });
+            const end = model.getOffsetAt({ lineNumber: marker.endLineNumber, column: marker.endColumn });
+            diagnostics.forEach(function (d) {
+              if (d.start !== start || d.end !== end || d.code !== marker.code || d.message !== marker.message) return;
+              d.fixes.forEach(function (fix) {
+                actions.push({
+                  title: fix.title,
+                  kind: "quickfix",
+                  diagnostics: [marker],
+                  edit: {
+                    edits: [
+                      {
+                        resource: model.uri,
+                        versionId: model.getVersionId(),
+                        textEdit: { range: cssRange(model, fix.start, fix.end), text: fix.text },
+                      },
+                    ],
+                  },
+                });
+              });
+            });
+          });
+          return { actions: actions, dispose: function () {} };
+        },
+      });
+
+      monaco.languages.registerColorProvider("javascript", {
+        provideDocumentColors: function (model) {
+          const data = cssData();
+          if (!data) return [];
+          const cc = window.__fcClassCompletion;
+          const lists = cssClassLists(model);
+          return describeCss(data, cc.classesNeedingColor(data, lists)).then(function () {
+            if (model.isDisposed()) return [];
+            return cc.documentColors(data, lists, data._described).map(function (c) {
+              return { color: c.color, range: cssRange(model, c.start, c.end) };
+            });
+          });
+        },
+        // Only an arbitrary colour (`bg-[#f00]`) takes one back from the picker.
+        provideColorPresentations: function (model, info) {
+          const className = model.getValueInRange(info.range);
+          return window.__fcClassCompletion.colorPresentations(className, info.color).map(function (label) {
+            return { label: label, textEdit: { range: info.range, text: label } };
+          });
         },
       });
 

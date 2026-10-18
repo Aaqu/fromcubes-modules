@@ -15,8 +15,17 @@
  *     type: "fromcubes-css",
  *     apiVersion: 1,
  *     generate(source) { return { css } },
- *     editor: { classes() { return ["p-4", …] } },   // optional: completion
+ *     editor: {                                      // optional, all three
+ *       classes() { return ["p-4", …] },             // names only
+ *       completions() { return { classes: [{ name, modifiers, color }], variants } },
+ *       describe(candidates) { return [{ hover, documentation, detail, color, rules, canonical } | null, …] },
+ *     },
  *   })
+ *
+ * `completions` and `describe` are what Tailwind CSS IntelliSense works
+ * from (modifiers, swatches, variants, CSS previews, colour squares in the
+ * code, conflict and canonical-class diagnostics); an engine with only
+ * `classes` still gets plain completion.
  *
  * The core builds in only `none` for each kind. Everything that does real
  * work — `headers` (@aaqu/fromcubes-auth-headers) and
@@ -69,6 +78,21 @@ const IDENTITY_TIMEOUT_MS = 5000;
 // every editor that opens a dialog.
 const MAX_EDITOR_CLASSES = 50000;
 const MAX_EDITOR_CLASS_LEN = 200;
+const MAX_EDITOR_MODIFIERS = 1000;
+const MAX_EDITOR_VARIANTS = 1000;
+const MAX_EDITOR_DETAIL_LEN = 2000;
+// One describe request: what a completion's detail pane, a hover or a
+// modifier list needs at once, for candidates that may carry an arbitrary
+// value — `w-[calc(100%-2rem)]` is longer than any listed class.
+const MAX_DESCRIBE = 64;
+const MAX_DESCRIBE_LEN = 1000;
+const MAX_DESCRIBE_TEXT = 100000;
+// Conflict-check entries per class: Tailwind's largest (shadows, with their
+// @property registrations) hold about twenty.
+const MAX_DESCRIBE_RULES = 200;
+// Swatch colours: the forms Monaco draws (hex, rgb()/rgba() with commas)
+// and the two keywords IntelliSense marks as colours without one.
+const EDITOR_COLOR_RE = /^(?:#[0-9a-fA-F]{3,8}|rgba?\([\d\s.,%]{1,60}\)|transparent|currentColor)$/;
 
 const USER_STRING_FIELDS = ["login", "displayName", "email", "role"];
 
@@ -139,6 +163,139 @@ function sanitizeUser(raw) {
 }
 
 /**
+ * @param {*} c
+ * @param {number} max
+ * @returns {boolean}  a non-empty string without whitespace, at most `max` long
+ */
+function isToken(c, max) {
+  return typeof c === "string" && c.length > 0 && c.length <= max && !/\s/.test(c);
+}
+
+/**
+ * @param {*} v
+ * @param {number} max
+ * @returns {string|null}
+ */
+function boundedOrNull(v, max) {
+  return typeof v === "string" && v.length <= max ? v : null;
+}
+
+/**
+ * @param {*} c
+ * @returns {string|null}
+ */
+function editorColor(c) {
+  return typeof c === "string" && EDITOR_COLOR_RE.test(c) ? c : null;
+}
+
+/**
+ * Validate a CSS engine's `editor.completions()` (or plain `classes()`)
+ * answer into what the editor is sent. Modifier lists are shared — Tailwind
+ * gives ~15 000 classes the same 21 opacity steps — so each distinct list
+ * travels once and classes point at it by index, as colours do by position.
+ *
+ * @param {*} rawClasses  Array of names, or of `{name, modifiers?, color?}`.
+ * @param {*} [rawVariants]
+ * @returns {{classes: Array<string>, colors: Array<string>, modifiers: Array<Array<string>>, classModifiers: Array<number>, variants: Array<Object>}}
+ */
+function normalizeCompletions(rawClasses, rawVariants) {
+  const classes = [];
+  const colors = [];
+  const modifiers = [];
+  const classModifiers = [];
+  const modifierIndex = new Map();
+  const seen = new Set();
+  for (const entry of Array.isArray(rawClasses) ? rawClasses : []) {
+    if (classes.length >= MAX_EDITOR_CLASSES) break;
+    const isObject = entry !== null && typeof entry === "object";
+    const name = isObject ? entry.name : entry;
+    if (!isToken(name, MAX_EDITOR_CLASS_LEN) || seen.has(name)) continue;
+    seen.add(name);
+    classes.push(name);
+    colors.push((isObject && editorColor(entry.color)) || "");
+    let mods = isObject && Array.isArray(entry.modifiers) ? entry.modifiers : [];
+    mods = mods.length <= MAX_EDITOR_MODIFIERS ? mods.filter((m) => isToken(m, MAX_EDITOR_CLASS_LEN)) : [];
+    if (mods.length === 0) {
+      classModifiers.push(-1);
+      continue;
+    }
+    const key = mods.join("\n");
+    let idx = modifierIndex.get(key);
+    if (idx === undefined) {
+      idx = modifiers.length;
+      modifiers.push(mods);
+      modifierIndex.set(key, idx);
+    }
+    classModifiers.push(idx);
+  }
+
+  const variants = [];
+  for (const v of Array.isArray(rawVariants) ? rawVariants : []) {
+    if (variants.length >= MAX_EDITOR_VARIANTS) break;
+    if (!v || typeof v !== "object" || !isToken(v.name, MAX_EDITOR_CLASS_LEN)) continue;
+    const values = Array.isArray(v.values) && v.values.length <= MAX_EDITOR_MODIFIERS ? v.values : [];
+    const valueDetails = Array.isArray(v.valueDetails) ? v.valueDetails : [];
+    const kept = [];
+    const details = [];
+    values.forEach((value, i) => {
+      if (!isToken(value, MAX_EDITOR_CLASS_LEN)) return;
+      kept.push(value);
+      details.push(boundedOrNull(valueDetails[i], MAX_EDITOR_DETAIL_LEN));
+    });
+    variants.push({
+      name: v.name,
+      values: kept,
+      hasDash: v.hasDash !== false,
+      isArbitrary: v.isArbitrary === true,
+      detail: boundedOrNull(v.detail, MAX_EDITOR_DETAIL_LEN),
+      valueDetails: details,
+      failed: v.failed === true,
+    });
+  }
+
+  return { classes, colors, modifiers, classModifiers, variants };
+}
+
+/**
+ * @param {*} list
+ * @param {number} maxItems
+ * @param {number} maxLen
+ * @returns {Array<string>|null}  the list when it is short strings only
+ */
+function boundedStrings(list, maxItems, maxLen) {
+  if (!Array.isArray(list) || list.length > maxItems) return null;
+  return list.every((v) => typeof v === "string" && v.length <= maxLen) ? list.slice() : null;
+}
+
+/**
+ * Validate one entry of a CSS engine's `editor.describe()` answer. `rules`
+ * (what the CSS-conflict diagnostic compares) and `canonical` (the spelling
+ * the canonical-class diagnostic suggests) are optional for an engine.
+ *
+ * @param {*} d
+ * @returns {{hover: string|null, documentation: string|null, detail: string|null, color: string|null, rules: Array<{properties: Array<string>, context: Array<string>}>, canonical: string|null}|null}
+ */
+function sanitizeDescription(d) {
+  if (!d || typeof d !== "object") return null;
+  const rules = [];
+  if (Array.isArray(d.rules) && d.rules.length <= MAX_DESCRIBE_RULES) {
+    for (const r of d.rules) {
+      const properties = r && boundedStrings(r.properties, MAX_DESCRIBE_RULES, MAX_EDITOR_CLASS_LEN);
+      const context = r && boundedStrings(r.context, MAX_DESCRIBE_RULES, MAX_EDITOR_DETAIL_LEN);
+      if (properties && context) rules.push({ properties, context });
+    }
+  }
+  return {
+    hover: boundedOrNull(d.hover, MAX_DESCRIBE_TEXT),
+    documentation: boundedOrNull(d.documentation, MAX_DESCRIBE_TEXT),
+    detail: boundedOrNull(d.detail, MAX_DESCRIBE_TEXT),
+    color: editorColor(d.color),
+    rules,
+    canonical: isToken(d.canonical, MAX_DESCRIBE_LEN) ? d.canonical : null,
+  };
+}
+
+/**
  * The only providers built into the core: one per kind that does nothing, so
  * "no identity" and "no stylesheet" are always choosable. Their ids are
  * reserved.
@@ -182,7 +339,8 @@ function builtinProviders() {
  *   cssEngineId: function(): string,
  *   describe: function(): Object,
  *   select: function(string, string): boolean,
- *   editorClasses: function(): Promise<{engine: string, classes: Array<string>}>,
+ *   editorClasses: function(): Promise<Object>,
+ *   describeClasses: function(Array<string>): Promise<{engine: string, results: Array<Object|null>}>,
  * }}
  */
 function createProviders(RED, opts = {}) {
@@ -195,8 +353,8 @@ function createProviders(RED, opts = {}) {
   const logged = new Set();
   /** @type {{identity?: string, css?: string}} */
   const chosen = loadChoice();
-  // provider object → its validated class list. Keyed by the object, not the
-  // id, so a plugin reinstalled at runtime (a new definition) is asked again.
+  // provider object → its validated completion data. Keyed by the object, not
+  // the id, so a plugin reinstalled at runtime (a new definition) is asked again.
   const classCache = new WeakMap();
 
   /**
@@ -525,44 +683,83 @@ function createProviders(RED, opts = {}) {
   }
 
   /**
-   * Class names the editor offers inside `className="…"` for the engine in
-   * force. Optional for plugins (`editor.classes()`); an engine without it,
-   * an unusable engine, or one that fails yields an empty list — completion
-   * just stays quiet, nothing else depends on it.
+   * What the editor completes inside `className="…"` for the engine in
+   * force: class names in the engine's order, with per class a swatch
+   * colour (`colors[i]`, "" for none) and modifier list (`modifiers[
+   * classModifiers[i]]`, -1 for none), plus the variants. Taken from the
+   * plugin's `editor.completions()`, or `editor.classes()` for names alone.
+   * Both are optional; an engine without them, an unusable engine, or one
+   * that fails yields an empty list — completion just stays quiet, nothing
+   * else depends on it. `describe` says whether `describeClasses` can
+   * explain classes for this engine.
    *
-   * @returns {Promise<{engine: string, classes: Array<string>}>}
+   * @returns {Promise<{engine: string, classes: Array<string>, colors: Array<string>, modifiers: Array<Array<string>>, classModifiers: Array<number>, variants: Array<Object>, describe: boolean}>}
    */
   async function editorClasses() {
     const engine = cssEngineId();
     const { provider } = lookup(CSS_TYPE, builtins.css, engine);
-    const fn = provider && provider.editor && provider.editor.classes;
-    if (typeof fn !== "function") return { engine, classes: [] };
-    if (classCache.has(provider)) return { engine, classes: classCache.get(provider) };
+    const editor = (provider && provider.editor) || {};
+    const describe = typeof editor.describe === "function";
+    const empty = () => ({ engine, ...normalizeCompletions([]), describe });
+    const fn = typeof editor.completions === "function" ? "completions" : "classes";
+    if (typeof editor[fn] !== "function") return empty();
+    if (classCache.has(provider)) return { engine, ...classCache.get(provider), describe };
     let raw;
     try {
-      raw = await fn.call(provider.editor);
+      raw = await editor[fn]();
     } catch (e) {
-      RED.log.warn(`[portal-react] css engine "${engine}" editor.classes() failed: ${e.message}`);
-      return { engine, classes: [] };
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.${fn}() failed: ${e.message}`);
+      return empty();
     }
-    const classes = [];
-    if (Array.isArray(raw)) {
-      const seen = new Set();
-      for (const c of raw) {
-        if (classes.length >= MAX_EDITOR_CLASSES) break;
-        if (typeof c !== "string" || !c || c.length > MAX_EDITOR_CLASS_LEN || /\s/.test(c)) continue;
-        if (seen.has(c)) continue;
-        seen.add(c);
-        classes.push(c);
-      }
-    } else {
-      RED.log.warn(`[portal-react] css engine "${engine}" editor.classes() did not return an array`);
+    const rawClasses = fn === "completions" ? raw && raw.classes : raw;
+    if (!Array.isArray(rawClasses)) {
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.${fn}() did not return ${fn === "completions" ? "a classes array" : "an array"}`);
     }
-    classCache.set(provider, classes);
-    return { engine, classes };
+    const data = normalizeCompletions(rawClasses, fn === "completions" && raw ? raw.variants : []);
+    classCache.set(provider, data);
+    return { engine, ...data, describe };
   }
 
-  return { resolveUser, generateCss, identityId, cssEngineId, describe, select, editorClasses };
+  /**
+   * What the editor shows for classes it has in hand — a completion's
+   * detail pane, a hover, a modifier's swatch, a colour square, a
+   * diagnostic — from the engine's `editor.describe()`: per candidate
+   * `{hover, documentation, detail, color, rules, canonical}`, or `null`
+   * when the engine generates nothing for it (which is
+   * also how the editor asks whether `group-hover/x` is a variant). Never
+   * rejects for an engine problem: no describe, or a failing one, answers
+   * `null` throughout.
+   *
+   * @param {*} candidates  At most 64 class candidates.
+   * @returns {Promise<{engine: string, results: Array<Object|null>}>}
+   * @throws {TypeError} for a malformed list — a caller's error, not the engine's.
+   */
+  async function describeClasses(candidates) {
+    if (
+      !Array.isArray(candidates) ||
+      candidates.length === 0 ||
+      candidates.length > MAX_DESCRIBE ||
+      !candidates.every((c) => isToken(c, MAX_DESCRIBE_LEN))
+    ) {
+      throw new TypeError(`expected 1-${MAX_DESCRIBE} class candidates`);
+    }
+    const engine = cssEngineId();
+    const { provider } = lookup(CSS_TYPE, builtins.css, engine);
+    const fn = provider && provider.editor && provider.editor.describe;
+    const nothing = { engine, results: candidates.map(() => null) };
+    if (typeof fn !== "function") return nothing;
+    let raw;
+    try {
+      raw = await fn.call(provider.editor, candidates.slice());
+    } catch (e) {
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.describe() failed: ${e.message}`);
+      return nothing;
+    }
+    if (!Array.isArray(raw)) return nothing;
+    return { engine, results: candidates.map((_, i) => sanitizeDescription(raw[i])) };
+  }
+
+  return { resolveUser, generateCss, identityId, cssEngineId, describe, select, editorClasses, describeClasses };
 }
 
 module.exports = {
@@ -578,4 +775,6 @@ module.exports = {
   MAX_USER_STRING,
   MAX_GROUPS,
   MAX_EDITOR_CLASSES,
+  MAX_DESCRIBE,
+  normalizeCompletions,
 };
