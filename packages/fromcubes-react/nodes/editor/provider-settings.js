@@ -1,10 +1,10 @@
 /**
- * Settings → Fromcubes: choose the identity provider and the CSS engine.
+ * Settings → Fromcubes: choose the CSS engine and the identity provider.
  *
  * Exactly one provider per kind, shown as a radio list, so two can never be
  * active at once. Reads and writes `/fromcubes-react/providers`; the server
  * validates, persists to <userDir>/fromcubes/providers.json, and applies the
- * change (identity: every portal session reloads; css: every portal rebuilds).
+ * change (css: every portal rebuilds; identity: every portal session reloads).
  * A kind set in settings.js is shown locked.
  *
  * Node-RED shows a pane by the element id `red-ui-settings-tab-<pane id>`,
@@ -19,16 +19,16 @@
 
   var KINDS = [
     {
-      kind: "identity",
-      title: "Identity provider",
-      hint: "Who is behind a portal session — used by Portal Auth, auth-cast and per-user delivery.",
-      setting: "identityProvider",
-    },
-    {
       kind: "css",
       title: "CSS engine",
       hint: "Generates each portal's stylesheet at deploy. Changing it rebuilds every portal.",
       setting: "cssEngine",
+    },
+    {
+      kind: "identity",
+      title: "Identity provider",
+      hint: "Who is behind a portal session — used by Portal Auth, auth-cast and per-user delivery.",
+      setting: "identityProvider",
     },
   ];
 
