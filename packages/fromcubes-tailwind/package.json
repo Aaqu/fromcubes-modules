@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-tailwind",
-  "version": "0.1.1",
+  "version": "0.1.2",
   "description": "Fromcubes CSS engine: Tailwind CSS 4 generated server-side, with editor class completion as in Tailwind CSS IntelliSense",
   "type": "commonjs",
   "keywords": [
