@@ -219,23 +219,31 @@ function registerProviderRoutes(RED, deps) {
   // a hover, a modifier's swatch, whether a variant exists. `c` carries the
   // candidates newline-separated — a class never holds whitespace, and one
   // string sidesteps query-string array parsing.
-  RED.httpAdmin.get("/fromcubes-react/css-describe", permRead, async (req, res) => {
-    const c = req.query.c;
-    if (typeof c !== "string") {
-      res.status(400).json({ error: "expected class candidates in c" });
-      return;
-    }
-    try {
-      res.json(await providers.describeClasses(c.split("\n")));
-    } catch (e) {
-      if (e instanceof TypeError) {
-        res.status(400).json({ error: e.message });
+  // Canonical spellings (`w-[16px]` → `w-4`) for the diagnostic — apart
+  // from css-describe because an engine may be slow here, and a hover must
+  // not wait for it. Same `c` format.
+  for (const [route, method, what] of [
+    ["css-describe", "describeClasses", "describe"],
+    ["css-canonical", "canonicalClasses", "canonicalise"],
+  ]) {
+    RED.httpAdmin.get("/fromcubes-react/" + route, permRead, async (req, res) => {
+      const c = req.query.c;
+      if (typeof c !== "string") {
+        res.status(400).json({ error: "expected class candidates in c" });
         return;
       }
-      RED.log.error("[portal-react] css-describe: " + e.message);
-      res.status(500).json({ error: "could not describe classes" });
-    }
-  });
+      try {
+        res.json(await providers[method](c.split("\n")));
+      } catch (e) {
+        if (e instanceof TypeError) {
+          res.status(400).json({ error: e.message });
+          return;
+        }
+        RED.log.error(`[portal-react] ${route}: ${e.message}`);
+        res.status(500).json({ error: `could not ${what} classes` });
+      }
+    });
+  }
 
   RED.httpAdmin.put(
     "/fromcubes-react/providers",

@@ -186,7 +186,7 @@ test("no providers dependency, no routes", async () => {
 
 test("GET /fromcubes-react/css-classes lists the engine in force, behind read permission", async () => {
   const providers = build();
-  const empty = (engine) => ({ engine, classes: [], colors: [], modifiers: [], classModifiers: [], variants: [], describe: false });
+  const empty = (engine) => ({ engine, classes: [], colors: [], modifiers: [], classModifiers: [], variants: [], describe: false, canonical: false });
   let res = await request(app).get("/fromcubes-react/css-classes");
   expect(res.status).toBe(200);
   // The TAILWIND stand-in has no editor data, so the list is empty here;
@@ -220,10 +220,28 @@ test("GET /fromcubes-react/css-describe explains newline-separated candidates, b
   expect(seen).toEqual([["p-4", "hover:[color:red]"]]);
   expect(res.body).toEqual({
     engine: "uno",
-    results: [{ hover: ".p-4 {}", documentation: ".p-4 {}", detail: "padding: 1rem;", color: null, rules: [], canonical: null }, null],
+    results: [{ hover: ".p-4 {}", documentation: ".p-4 {}", detail: "padding: 1rem;", color: null, rules: [] }, null],
   });
   expect(gate.read).toContain("GET /fromcubes-react/css-describe");
   expect(gate.rate).not.toContain("GET /fromcubes-react/css-describe");
+});
+
+test("GET /fromcubes-react/css-canonical: canonical spellings, behind read permission", async () => {
+  const uno = {
+    id: "uno",
+    type: CSS_TYPE,
+    apiVersion: API_VERSION,
+    generate: () => ({ css: "" }),
+    editor: { canonical: (list) => list.map((c) => (c === "w-[16px]" ? "w-4" : c)) },
+  };
+  const providers = build({ plugins: [uno] });
+  providers.select("css", "uno");
+  const res = await request(app).get("/fromcubes-react/css-canonical").query({ c: "w-[16px]\np-4" });
+  expect(res.status).toBe(200);
+  expect(res.body).toEqual({ engine: "uno", results: ["w-4", null] });
+  expect(gate.read).toContain("GET /fromcubes-react/css-canonical");
+  expect((await request(app).get("/fromcubes-react/css-canonical")).status).toBe(400);
+  expect((await request(app).get("/fromcubes-react/css-canonical").query({ c: "a b" })).status).toBe(400);
 });
 
 test("GET /fromcubes-react/css-describe: 400 for a missing or malformed list", async () => {

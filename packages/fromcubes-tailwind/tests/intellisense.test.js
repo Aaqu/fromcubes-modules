@@ -4,7 +4,8 @@
  * variant details, checked against what Tailwind CSS IntelliSense shows.
  */
 
-const { completionData, describeCandidates, getDesignSystem } = require("../candidates");
+const { completionData, describeCandidates, canonicalCandidates, getDesignSystem } = require("../candidates");
+const { canonicalizer } = require("../canonical");
 const {
   addPixelEquivalentsToValue,
   addPixelEquivalentsToMediaQuery,
@@ -17,13 +18,10 @@ const {
 
 const describeOne = async (c) => (await describeCandidates([c]))[0];
 
-// Load the design system, the colour pass and the canonical-name worker's
-// index once, outside any one test's time limit: describe() waits for the
-// worker, and on a CI runner its first build alone takes ~6 s.
-beforeAll(async () => {
-  await completionData();
-  await describeCandidates(["w-[16px]"]);
-}, 120000);
+// Load the design system and the colour pass once, outside any one test's
+// time limit — slow beside parallel suites.
+beforeAll(() => completionData(), 60000);
+afterAll(() => canonicalizer.stop());
 
 describe("describe — what the detail pane and the hover show", () => {
   it("spacing: theme value resolved, pixel equivalent added", async () => {
@@ -33,8 +31,16 @@ describe("describe — what the detail pane and the hover show", () => {
       detail: "padding: 1rem /* 16px */;",
       color: null,
       rules: [{ properties: ["padding"], context: [] }],
-      canonical: null,
     });
+  });
+
+  it("never waits for the canonical-name worker", async () => {
+    canonicalizer.stop();
+    canonicalizer.warm(); // building its index for the next second or more
+    const started = Date.now();
+    await describeCandidates(["p-8", "text-blue-500"]);
+    expect(Date.now() - started).toBeLessThan(500);
+    expect(Object.keys((await describeOne("p-8")))).not.toContain("canonical");
   });
 
   it("colour: oklch value and its hex, swatch colour", async () => {
@@ -107,9 +113,10 @@ describe("diagnostics data — what cssConflict and suggestCanonicalClasses comp
     expect(rules).toContainEqual({ properties: ["syntax", "inherits", "initial-value"], context: ["@property --tw-shadow"] });
   });
 
-  it("canonical spelling, or null when already canonical", async () => {
-    const r = await describeCandidates(["w-[16px]", "flex-grow", "mt-[-16px]", "bg-red-500/[50%]", "p-4", "hover:bg-red-500"]);
-    expect(r.map((x) => x.canonical)).toEqual(["w-4", "grow", "-mt-4", "bg-red-500/50", null, null]);
+  // The worker's first answer waits for its index: ~2 s here, ~6 s on CI.
+  it("canonical spelling, or null when already canonical", { timeout: 60000 }, async () => {
+    const r = await canonicalCandidates(["w-[16px]", "flex-grow", "mt-[-16px]", "bg-red-500/[50%]", "p-4", "hover:bg-red-500"]);
+    expect(r).toEqual(["w-4", "grow", "-mt-4", "bg-red-500/50", null, null]);
   });
 
   it("cssEscape follows CSS.escape", () => {

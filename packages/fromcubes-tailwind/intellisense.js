@@ -967,13 +967,13 @@ function conflictRules(ast, className) {
  * - `detail`: the one-line declaration summary, or `N rules`.
  * - `color`: as `colorOf`.
  * - `rules`: what the CSS-conflict diagnostic compares (`conflictRules`).
- * - `canonical`: the spelling the canonical-class diagnostic suggests —
- *   always `null` here; candidates.js fills it in from the worker thread
- *   (canonical.js), as computing it can stall the thread it runs on.
+ *
+ * The canonical spelling is not here: it comes from a worker thread
+ * (canonical.js), and nothing that waits for this should wait for that.
  *
  * @param {Object} ds
  * @param {string} candidate
- * @returns {{hover: string, documentation: string|null, detail: string|null, color: string|null, rules: Array<Object>, canonical: string|null}|null}
+ * @returns {{hover: string, documentation: string|null, detail: string|null, color: string|null, rules: Array<Object>}|null}
  */
 function describeCandidate(ds, candidate) {
   const ast = compile(ds, candidate);
@@ -988,7 +988,6 @@ function describeCandidate(ds, candidate) {
     detail: shown.length === 1 ? stringifyDecls(ds, ast) : shown.length > 1 ? `${shown.length} rules` : null,
     color: colorOf(ds, candidate, ast),
     rules: conflictRules(ast, candidate),
-    canonical: null,
   };
 }
 

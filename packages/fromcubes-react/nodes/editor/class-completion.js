@@ -414,8 +414,9 @@
     }
     Object.defineProperty(data, "_index", { value: index });
     Object.defineProperty(data, "_allVariants", { value: all });
-    // Kept when the glue carries it over from the previous fetch.
+    // Kept when the glue carries them over from the previous fetch.
     if (!data._described) Object.defineProperty(data, "_described", { value: new Map() });
+    if (!data._canonical) Object.defineProperty(data, "_canonical", { value: new Map() });
     return data;
   }
 
@@ -765,9 +766,10 @@
    *
    * @param {Array<Object>} classLists  findClassListsInText()
    * @param {Map<string, Object|null>} described  describe() results by class
+   * @param {Map<string, string|null>} [canonical]  canonical spellings by class
    * @returns {Array<Object>}
    */
-  function diagnose(classLists, described) {
+  function diagnose(classLists, described, canonical) {
     const diagnostics = [];
     const quote = function (c) {
       return "'" + c.className + "'";
@@ -809,17 +811,16 @@
 
     for (const list of classLists) {
       for (const c of getClassNamesInClassList(list)) {
-        const d = described.get(c.className);
-        const canonical = d && d.canonical;
-        if (!canonical || canonical === c.className) continue;
+        const spelling = canonical && canonical.get(c.className);
+        if (!spelling || spelling === c.className) continue;
         diagnostics.push({
           code: "suggestCanonicalClasses",
           severity: "warning",
           start: c.start,
           end: c.end,
-          message: "The class `" + c.className + "` can be written as `" + canonical + "`",
+          message: "The class `" + c.className + "` can be written as `" + spelling + "`",
           related: [],
-          fixes: [{ title: "Replace with '" + canonical + "'", start: c.start, end: c.end, text: canonical }],
+          fixes: [{ title: "Replace with '" + spelling + "'", start: c.start, end: c.end, text: spelling }],
         });
       }
     }
