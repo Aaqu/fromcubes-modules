@@ -17,9 +17,13 @@ const {
 
 const describeOne = async (c) => (await describeCandidates([c]))[0];
 
-// Load the design system and the colour pass once, outside any one test's
-// time limit — slow beside parallel suites.
-beforeAll(() => completionData(), 60000);
+// Load the design system, the colour pass and the canonical-name worker's
+// index once, outside any one test's time limit: describe() waits for the
+// worker, and on a CI runner its first build alone takes ~6 s.
+beforeAll(async () => {
+  await completionData();
+  await describeCandidates(["w-[16px]"]);
+}, 120000);
 
 describe("describe — what the detail pane and the hover show", () => {
   it("spacing: theme value resolved, pixel equivalent added", async () => {
