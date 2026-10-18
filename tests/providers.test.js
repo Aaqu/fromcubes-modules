@@ -624,6 +624,7 @@ describe("editorClasses()", () => {
     classModifiers: classes.map(() => -1),
     variants: [],
     describe,
+    canonical: false,
   });
 
   it("tailwind: the candidate list, computed once", async () => {
@@ -640,6 +641,7 @@ describe("editorClasses()", () => {
     const { p } = make();
     const data = await p.editorClasses();
     expect(data.describe).toBe(true);
+    expect(data.canonical).toBe(true);
     expect(data.classes.length).toBeGreaterThan(20000);
     const at = (name) => data.classes.indexOf(name);
     expect(data.colors[at("bg-red-500")]).toBe("#fb2c36");
@@ -704,6 +706,7 @@ describe("editorClasses()", () => {
       { name: "group", values: ["hover"], hasDash: true, isArbitrary: true, detail: null, valueDetails: ["&:is(:where(.group):hover *)"], failed: false },
     ]);
     expect(data.describe).toBe(false);
+    expect(data.canonical).toBe(false);
   });
 
   it("completions() that throws or returns no classes array ⇒ empty list + warn", async () => {
@@ -767,7 +770,6 @@ describe("describeClasses()", () => {
       detail: "padding: 1rem /* 16px */;",
       color: null,
       rules: [{ properties: ["padding"], context: [] }],
-      canonical: null,
     });
     expect(results[1].color).toBe("#fb2c36");
     expect(results[1].hover).toContain("@media (hover: hover)");
@@ -801,12 +803,12 @@ describe("describeClasses()", () => {
     });
     const { p } = make({ plugins: [odd], settings: { cssEngine: "odd" } });
     expect((await p.describeClasses(["a", "b"])).results).toEqual([
-      { hover: "a", documentation: null, detail: null, color: null, rules: [], canonical: null },
+      { hover: "a", documentation: null, detail: null, color: null, rules: [] },
       null,
     ]);
   });
 
-  it("keeps well-formed conflict rules and a canonical spelling", async () => {
+  it("keeps well-formed conflict rules only", async () => {
     const odd = cssPlugin("odd", () => ({ css: "" }), {
       editor: {
         describe: () => [
@@ -817,17 +819,47 @@ describe("describeClasses()", () => {
               { properties: ["x"] },
               "nope",
             ],
-            canonical: "w-4",
           },
-          { rules: "padding", canonical: "has space" },
+          { rules: "padding" },
         ],
       },
     });
     const { p } = make({ plugins: [odd], settings: { cssEngine: "odd" } });
     const [a, b] = (await p.describeClasses(["w-[16px]", "b"])).results;
     expect(a.rules).toEqual([{ properties: ["padding"], context: ["@media (width >= 48rem)"] }]);
-    expect(a.canonical).toBe("w-4");
     expect(b.rules).toEqual([]);
-    expect(b.canonical).toBeNull();
+  });
+});
+
+// ── canonicalClasses(): canonical spellings, for the diagnostic ──
+
+describe("canonicalClasses()", () => {
+  it("the real tailwind add-on, from its worker thread", { timeout: 60000 }, async () => {
+    const { p } = make();
+    expect(await p.canonicalClasses(["w-[16px]", "p-4", "flex-grow"])).toEqual({
+      engine: "tailwind",
+      results: ["w-4", null, "grow"],
+    });
+    require("../packages/fromcubes-tailwind/canonical").canonicalizer.stop();
+  });
+
+  it("rejects a malformed request with TypeError", async () => {
+    const { p } = make();
+    for (const bad of [[], "p-4", ["has space"], Array.from({ length: 65 }, () => "p-4")]) {
+      await expect(p.canonicalClasses(bad)).rejects.toThrow(TypeError);
+    }
+  });
+
+  it("no canonical(), a failing one, or junk answers: null", async () => {
+    const plain = cssPlugin("plain", () => ({ css: "" }));
+    const boom = cssPlugin("boom", () => ({ css: "" }), { editor: { canonical: () => { throw new Error("nope"); } } });
+    const odd = cssPlugin("odd", () => ({ css: "" }), { editor: { canonical: () => ["has space", "b", 5, "w-4"] } });
+    for (const cssEngine of ["none", "plain", "boom"]) {
+      const { p } = make({ plugins: [plain, boom, odd], settings: { cssEngine } });
+      expect((await p.canonicalClasses(["a", "b"])).results).toEqual([null, null]);
+    }
+    const { p } = make({ plugins: [odd], settings: { cssEngine: "odd" } });
+    // whitespace, an answer equal to the class, a non-string: no suggestion
+    expect((await p.canonicalClasses(["a", "b", "c", "w-[16px]"])).results).toEqual([null, null, null, "w-4"]);
   });
 });

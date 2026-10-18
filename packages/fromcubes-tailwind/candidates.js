@@ -80,33 +80,37 @@ function completionData() {
 }
 
 /**
- * The CSS, declaration summary, colour, conflict rules and canonical
- * spelling of each candidate — for the completion's detail pane, the hover,
- * modifier swatches, colour squares and diagnostics. `null` for a candidate
- * Tailwind generates nothing for. The canonical spelling comes from the
- * worker thread; when it cannot give one, `canonical` stays `null`.
+ * The CSS, declaration summary, colour and conflict rules of each
+ * candidate — for the completion's detail pane, the hover, modifier
+ * swatches, colour squares and the conflict check. `null` for a candidate
+ * Tailwind generates nothing for. Computed here, in milliseconds; never
+ * waits for the worker.
  *
  * @param {Array<string>} candidates
  * @returns {Promise<Array<Object|null>>}
  */
 async function describeCandidates(candidates) {
   const ds = await getDesignSystem();
-  const results = candidates.map((candidate) => {
+  return candidates.map((candidate) => {
     try {
       return describeCandidate(ds, candidate);
     } catch {
       return null;
     }
   });
-  const known = candidates.filter((_, i) => results[i]);
-  const canonical = await canonicalizer.canonicalize(known);
-  let j = 0;
-  results.forEach((r, i) => {
-    if (!r) return;
-    const c = canonical[j++];
-    r.canonical = c && c !== candidates[i] ? c : null;
-  });
-  return results;
 }
 
-module.exports = { generateCandidates, completionData, describeCandidates, getDesignSystem };
+/**
+ * The canonical spelling Tailwind suggests per candidate (`w-[16px]` →
+ * `w-4`), `null` when it already is one or none could be had. From the
+ * worker thread: the first answer after a start waits for its index.
+ *
+ * @param {Array<string>} candidates
+ * @returns {Promise<Array<string|null>>}
+ */
+async function canonicalCandidates(candidates) {
+  const results = await canonicalizer.canonicalize(candidates);
+  return results.map((c, i) => (c && c !== candidates[i] ? c : null));
+}
+
+module.exports = { generateCandidates, completionData, describeCandidates, canonicalCandidates, getDesignSystem };

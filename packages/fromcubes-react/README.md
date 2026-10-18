@@ -330,11 +330,13 @@ portalReact: {
 - For the rest of the IntelliSense experience an engine may add
   `editor.completions()` → `{ classes: [{ name, modifiers, color }], variants }`
   (variants: `{ name, values, hasDash, isArbitrary, detail, valueDetails }`)
-  and `editor.describe(candidates)` → per class
-  `{ hover, documentation, detail, color, rules, canonical }` or `null` (CSS
-  for the detail pane and hover, colour as `#rrggbb` / `rgba(…)`, what the
-  conflict check compares, the canonical spelling). The Tailwind add-on is
-  the reference implementation.
+  `editor.describe(candidates)` → per class
+  `{ hover, documentation, detail, color, rules }` or `null` (CSS for the
+  detail pane and hover, colour as `#rrggbb` / `rgba(…)`, what the conflict
+  check compares) — keep it fast, hovers wait for it — and
+  `editor.canonical(candidates)` → per class a shorter spelling or `null`
+  (only the canonical-class warning waits for it). The Tailwind add-on is the
+  reference implementation.
 - An unknown provider name is logged once; for identity every session is then
   anonymous. The settings pane flags a selected provider whose package is gone.
 - Optional `label: "…"` on the plugin is shown next to its id in the settings

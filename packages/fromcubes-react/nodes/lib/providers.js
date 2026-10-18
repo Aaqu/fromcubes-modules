@@ -18,12 +18,13 @@
  *     editor: {                                      // optional, all three
  *       classes() { return ["p-4", …] },             // names only
  *       completions() { return { classes: [{ name, modifiers, color }], variants } },
- *       describe(candidates) { return [{ hover, documentation, detail, color, rules, canonical } | null, …] },
+ *       describe(candidates) { return [{ hover, documentation, detail, color, rules } | null, …] },
+ *       canonical(candidates) { return ["w-4" | null, …] },
  *     },
  *   })
  *
- * `completions` and `describe` are what Tailwind CSS IntelliSense works
- * from (modifiers, swatches, variants, CSS previews, colour squares in the
+ * `completions`, `describe` and `canonical` are what Tailwind CSS
+ * IntelliSense works from (modifiers, swatches, variants, CSS previews, colour squares in the
  * code, conflict and canonical-class diagnostics); an engine with only
  * `classes` still gets plain completion.
  *
@@ -269,11 +270,10 @@ function boundedStrings(list, maxItems, maxLen) {
 
 /**
  * Validate one entry of a CSS engine's `editor.describe()` answer. `rules`
- * (what the CSS-conflict diagnostic compares) and `canonical` (the spelling
- * the canonical-class diagnostic suggests) are optional for an engine.
+ * (what the CSS-conflict diagnostic compares) is optional for an engine.
  *
  * @param {*} d
- * @returns {{hover: string|null, documentation: string|null, detail: string|null, color: string|null, rules: Array<{properties: Array<string>, context: Array<string>}>, canonical: string|null}|null}
+ * @returns {{hover: string|null, documentation: string|null, detail: string|null, color: string|null, rules: Array<{properties: Array<string>, context: Array<string>}>}|null}
  */
 function sanitizeDescription(d) {
   if (!d || typeof d !== "object") return null;
@@ -291,7 +291,6 @@ function sanitizeDescription(d) {
     detail: boundedOrNull(d.detail, MAX_DESCRIBE_TEXT),
     color: editorColor(d.color),
     rules,
-    canonical: isToken(d.canonical, MAX_DESCRIBE_LEN) ? d.canonical : null,
   };
 }
 
@@ -341,6 +340,7 @@ function builtinProviders() {
  *   select: function(string, string): boolean,
  *   editorClasses: function(): Promise<Object>,
  *   describeClasses: function(Array<string>): Promise<{engine: string, results: Array<Object|null>}>,
+ *   canonicalClasses: function(Array<string>): Promise<{engine: string, results: Array<string|null>}>,
  * }}
  */
 function createProviders(RED, opts = {}) {
@@ -690,20 +690,21 @@ function createProviders(RED, opts = {}) {
    * plugin's `editor.completions()`, or `editor.classes()` for names alone.
    * Both are optional; an engine without them, an unusable engine, or one
    * that fails yields an empty list — completion just stays quiet, nothing
-   * else depends on it. `describe` says whether `describeClasses` can
-   * explain classes for this engine.
+   * else depends on it. `describe` / `canonical` say whether
+   * `describeClasses` / `canonicalClasses` have anything to ask the engine.
    *
-   * @returns {Promise<{engine: string, classes: Array<string>, colors: Array<string>, modifiers: Array<Array<string>>, classModifiers: Array<number>, variants: Array<Object>, describe: boolean}>}
+   * @returns {Promise<{engine: string, classes: Array<string>, colors: Array<string>, modifiers: Array<Array<string>>, classModifiers: Array<number>, variants: Array<Object>, describe: boolean, canonical: boolean}>}
    */
   async function editorClasses() {
     const engine = cssEngineId();
     const { provider } = lookup(CSS_TYPE, builtins.css, engine);
     const editor = (provider && provider.editor) || {};
     const describe = typeof editor.describe === "function";
-    const empty = () => ({ engine, ...normalizeCompletions([]), describe });
+    const canonical = typeof editor.canonical === "function";
+    const empty = () => ({ engine, ...normalizeCompletions([]), describe, canonical });
     const fn = typeof editor.completions === "function" ? "completions" : "classes";
     if (typeof editor[fn] !== "function") return empty();
-    if (classCache.has(provider)) return { engine, ...classCache.get(provider), describe };
+    if (classCache.has(provider)) return { engine, ...classCache.get(provider), describe, canonical };
     let raw;
     try {
       raw = await editor[fn]();
@@ -717,14 +718,14 @@ function createProviders(RED, opts = {}) {
     }
     const data = normalizeCompletions(rawClasses, fn === "completions" && raw ? raw.variants : []);
     classCache.set(provider, data);
-    return { engine, ...data, describe };
+    return { engine, ...data, describe, canonical };
   }
 
   /**
    * What the editor shows for classes it has in hand — a completion's
    * detail pane, a hover, a modifier's swatch, a colour square, a
    * diagnostic — from the engine's `editor.describe()`: per candidate
-   * `{hover, documentation, detail, color, rules, canonical}`, or `null`
+   * `{hover, documentation, detail, color, rules}`, or `null`
    * when the engine generates nothing for it (which is
    * also how the editor asks whether `group-hover/x` is a variant). Never
    * rejects for an engine problem: no describe, or a failing one, answers
@@ -735,14 +736,7 @@ function createProviders(RED, opts = {}) {
    * @throws {TypeError} for a malformed list — a caller's error, not the engine's.
    */
   async function describeClasses(candidates) {
-    if (
-      !Array.isArray(candidates) ||
-      candidates.length === 0 ||
-      candidates.length > MAX_DESCRIBE ||
-      !candidates.every((c) => isToken(c, MAX_DESCRIBE_LEN))
-    ) {
-      throw new TypeError(`expected 1-${MAX_DESCRIBE} class candidates`);
-    }
+    checkCandidates(candidates);
     const engine = cssEngineId();
     const { provider } = lookup(CSS_TYPE, builtins.css, engine);
     const fn = provider && provider.editor && provider.editor.describe;
@@ -759,7 +753,56 @@ function createProviders(RED, opts = {}) {
     return { engine, results: candidates.map((_, i) => sanitizeDescription(raw[i])) };
   }
 
-  return { resolveUser, generateCss, identityId, cssEngineId, describe, select, editorClasses, describeClasses };
+  /**
+   * The canonical spelling the engine suggests per class (`w-[16px]` →
+   * `w-4`), or `null` — for the canonical-class diagnostic only. Kept apart
+   * from `describeClasses` because an engine may take its time here (the
+   * Tailwind add-on asks a worker thread whose first answer waits for an
+   * index) and a hover must never wait for that. Never rejects for an
+   * engine problem.
+   *
+   * @param {*} candidates  At most 64 class candidates.
+   * @returns {Promise<{engine: string, results: Array<string|null>}>}
+   * @throws {TypeError} for a malformed list.
+   */
+  async function canonicalClasses(candidates) {
+    checkCandidates(candidates);
+    const engine = cssEngineId();
+    const { provider } = lookup(CSS_TYPE, builtins.css, engine);
+    const fn = provider && provider.editor && provider.editor.canonical;
+    const nothing = { engine, results: candidates.map(() => null) };
+    if (typeof fn !== "function") return nothing;
+    let raw;
+    try {
+      raw = await fn.call(provider.editor, candidates.slice());
+    } catch (e) {
+      RED.log.warn(`[portal-react] css engine "${engine}" editor.canonical() failed: ${e.message}`);
+      return nothing;
+    }
+    if (!Array.isArray(raw)) return nothing;
+    return {
+      engine,
+      results: candidates.map((c, i) => (isToken(raw[i], MAX_DESCRIBE_LEN) && raw[i] !== c ? raw[i] : null)),
+    };
+  }
+
+  /**
+   * @param {*} candidates
+   * @returns {void}
+   * @throws {TypeError} unless 1–64 class candidates
+   */
+  function checkCandidates(candidates) {
+    if (
+      !Array.isArray(candidates) ||
+      candidates.length === 0 ||
+      candidates.length > MAX_DESCRIBE ||
+      !candidates.every((c) => isToken(c, MAX_DESCRIBE_LEN))
+    ) {
+      throw new TypeError(`expected 1-${MAX_DESCRIBE} class candidates`);
+    }
+  }
+
+  return { resolveUser, generateCss, identityId, cssEngineId, describe, select, editorClasses, describeClasses, canonicalClasses };
 }
 
 module.exports = {

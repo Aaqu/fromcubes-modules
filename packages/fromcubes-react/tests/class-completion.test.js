@@ -289,16 +289,17 @@ describe("findClassListsInText — every class list in the document", () => {
 });
 
 describe("diagnose — cssConflict and suggestCanonicalClasses", () => {
-  const padding = { rules: [{ properties: ["padding"], context: [] }], canonical: null };
+  const padding = { rules: [{ properties: ["padding"], context: [] }] };
   const described = new Map([
     ["p-2", padding],
     ["p-4", padding],
-    ["md:p-4", { rules: [{ properties: ["padding"], context: ["@media (width >= 48rem)"] }], canonical: null }],
-    ["flex", { rules: [{ properties: ["display"], context: [] }], canonical: null }],
-    ["w-[16px]", { rules: [{ properties: ["width"], context: [] }], canonical: "w-4" }],
+    ["md:p-4", { rules: [{ properties: ["padding"], context: ["@media (width >= 48rem)"] }] }],
+    ["flex", { rules: [{ properties: ["display"], context: [] }] }],
+    ["w-[16px]", { rules: [{ properties: ["width"], context: [] }] }],
     ["custom", null],
   ]);
-  const run = (src) => cc.diagnose(cc.findClassListsInText(src), described);
+  const canonical = new Map([["w-[16px]", "w-4"], ["p-2", null]]);
+  const run = (src) => cc.diagnose(cc.findClassListsInText(src), described, canonical);
 
   it("same properties in the same place: each class flagged, naming the others", () => {
     const src = '<div className="flex p-2 md:p-4 p-4 custom">';
@@ -331,6 +332,11 @@ describe("diagnose — cssConflict and suggestCanonicalClasses", () => {
     const canon = d[2];
     expect(canon.message).toBe("The class `w-[16px]` can be written as `w-4`");
     expect(canon.fixes).toEqual([{ title: "Replace with 'w-4'", start: canon.start, end: canon.end, text: "w-4" }]);
+  });
+
+  it("without canonical answers yet: conflicts only", () => {
+    const d = cc.diagnose(cc.findClassListsInText('<div className="w-[16px] p-2 p-4">'), described);
+    expect(d.map((x) => x.code)).toEqual(["cssConflict", "cssConflict"]);
   });
 
   it("classes the engine does not generate are never reported", () => {

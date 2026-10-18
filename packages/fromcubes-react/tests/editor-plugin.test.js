@@ -79,7 +79,9 @@ test("className completion, resolve and hover run on the class-completion helper
   const html = fs.readFileSync(path.join(__dirname, "..", "nodes", "portal-react.html"), "utf8");
   expect(html).toContain("registerHoverProvider(\"javascript\"");
   expect(html).toContain("resolveCompletionItem");
-  expect(html).toContain('url: "fromcubes-react/css-describe"');
+  expect(html).toContain('askCssEngine(data, data.describe, "css-describe"');
+  // canonical spellings apart: slow engines never hold back hovers or conflicts
+  expect(html).toContain('askCssEngine(data, data.canonical, "css-canonical"');
   expect(html).toContain("window.__fcClassCompletion.TRIGGER_CHARACTERS");
   // no second, hand-rolled matcher beside it
   expect(html).not.toContain("cls.indexOf(word) === 0");

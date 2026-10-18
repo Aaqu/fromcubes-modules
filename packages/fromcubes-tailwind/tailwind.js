@@ -10,7 +10,7 @@
 
 const { CSS_TYPE, API_VERSION } = require("@aaqu/fromcubes-react/api");
 const { generateCSS } = require("./css");
-const { generateCandidates, completionData, describeCandidates } = require("./candidates");
+const { generateCandidates, completionData, describeCandidates, canonicalCandidates } = require("./candidates");
 const { canonicalizer } = require("./canonical");
 
 const provider = {
@@ -23,6 +23,7 @@ const provider = {
     classes: () => generateCandidates(),
     completions: () => completionData(),
     describe: (candidates) => describeCandidates(candidates),
+    canonical: (candidates) => canonicalCandidates(candidates),
   },
 };
 

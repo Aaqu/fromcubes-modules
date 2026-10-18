@@ -69,11 +69,13 @@
           classModifiers: data.classModifiers || [],
           variants: data.variants || [],
           describe: data.describe === true,
+          canonical: data.canonical === true,
         };
         // What the engine said about classes stays true while it is the same
         // engine; a refetch on every dialog open must not ask again.
         if (prev && prev.engine === data.engine && prev._described) {
           Object.defineProperty(window.__fcCssData, "_described", { value: prev._described });
+          Object.defineProperty(window.__fcCssData, "_canonical", { value: prev._canonical });
         }
         if (window.__fcRevalidateCss) window.__fcRevalidateCss();
       })
@@ -154,45 +156,77 @@
         return cc.prepare(data);
       }
 
-      // What the engine says about each candidate (CSS, summary, colour), or
-      // null — one request per batch, answers kept for the data's lifetime.
+      // What the engine says about each candidate (CSS, summary, colour,
+      // conflict rules), or null — one request per batch, answers kept for
+      // the data's lifetime. Fast: hovers and the detail pane wait for it.
       function describeCss(data, candidates) {
+        return askCssEngine(data, data.describe, "css-describe", data._described, candidates, 5000);
+      }
+
+      // Canonical spellings, for the diagnostic only: the engine may take its
+      // time (the Tailwind add-on's worker builds an index on its first
+      // answer), so nothing else waits for these.
+      function canonicalCss(data, candidates) {
+        return askCssEngine(data, data.canonical, "css-canonical", data._canonical, candidates, 30000);
+      }
+
+      const cssInflight = new WeakMap(); // answer cache → candidate → pending request
+
+      function askCssEngine(data, supported, route, cache, candidates, timeout) {
         const cc = window.__fcClassCompletion;
         const nulls = candidates.map(function () {
           return null;
         });
-        if (!data.describe) return Promise.resolve(nulls);
-        const cache = data._described;
+        if (!supported) return Promise.resolve(nulls);
+        // Classes already asked about and not answered yet are waited for,
+        // not asked again — typing while the first answer is slow would
+        // otherwise queue the same classes over and over.
+        let inflight = cssInflight.get(cache);
+        if (!inflight) cssInflight.set(cache, (inflight = new Map()));
+        const waiting = [];
         const missing = candidates.filter(function (c, i) {
-          return !cache.has(c) && candidates.indexOf(c) === i;
+          if (cache.has(c) || candidates.indexOf(c) !== i) return false;
+          if (inflight.has(c)) {
+            waiting.push(inflight.get(c));
+            return false;
+          }
+          return true;
         });
         const batches = [];
         for (let i = 0; i < missing.length; i += cc.MAX_DESCRIBE) {
           batches.push(missing.slice(i, i + cc.MAX_DESCRIBE));
         }
-        return Promise.all(
-          batches.map(function (batch) {
-            return new Promise(function (resolve) {
-              $.ajax({
-                url: "fromcubes-react/css-describe",
-                data: { c: batch.join("\n") },
-                dataType: "json",
-                timeout: 5000,
+        const asked = batches.map(function (batch) {
+          const request = new Promise(function (resolve) {
+            $.ajax({
+              url: "fromcubes-react/" + route,
+              data: { c: batch.join("\n") },
+              dataType: "json",
+              timeout: timeout,
+            })
+              .done(function (res) {
+                if (res && Array.isArray(res.results) && res.engine === data.engine) {
+                  batch.forEach(function (c, i) {
+                    cache.set(c, res.results[i] || null);
+                  });
+                }
               })
-                .done(function (res) {
-                  if (res && Array.isArray(res.results) && res.engine === data.engine) {
-                    batch.forEach(function (c, i) {
-                      cache.set(c, res.results[i] || null);
-                    });
-                  }
-                })
-                .fail(function (xhr) {
-                  console.error(PREFIX, "css-describe FAILED:", xhr.status, xhr.statusText);
-                })
-                .always(resolve);
-            });
-          }),
-        ).then(function () {
+              .fail(function (xhr) {
+                console.error(PREFIX, route + " FAILED:", xhr.status, xhr.statusText);
+              })
+              .always(function () {
+                batch.forEach(function (c) {
+                  inflight.delete(c);
+                });
+                resolve();
+              });
+          });
+          batch.forEach(function (c) {
+            inflight.set(c, request);
+          });
+          return request;
+        });
+        return Promise.all(asked.concat(waiting)).then(function () {
           return candidates.map(function (c) {
             return cache.has(c) ? cache.get(c) : null;
           });
@@ -377,26 +411,37 @@
         const cc = window.__fcClassCompletion;
         const version = model.getVersionId();
         const lists = cssClassLists(model);
-        describeCss(data, cc.uniqueClassNames(lists)).then(function () {
-          if (model.isDisposed() || model.getVersionId() !== version || cssData() !== data) return;
-          const diagnostics = cc.diagnose(lists, data._described);
-          cssDiagnostics.set(model, diagnostics);
-          monaco.editor.setModelMarkers(
-            model,
-            CSS_MARKER_OWNER,
-            diagnostics.map(function (d) {
-              return Object.assign(cssRange(model, d.start, d.end), {
-                severity: d.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
-                message: d.message,
-                source: "tailwindcss",
-                code: d.code,
-                relatedInformation: d.related.map(function (r) {
-                  return Object.assign(cssRange(model, r.start, r.end), { resource: model.uri, message: r.message });
-                }),
-              });
-            }),
-          );
+        const names = cc.uniqueClassNames(lists);
+        // Conflicts as soon as the classes are described; canonical
+        // suggestions join when the engine has them — a slow first answer
+        // never holds back the rest.
+        describeCss(data, names).then(function () {
+          publishCssMarkers(model, version, data, lists);
+          canonicalCss(data, names).then(function () {
+            publishCssMarkers(model, version, data, lists);
+          });
         });
+      }
+
+      function publishCssMarkers(model, version, data, lists) {
+        if (model.isDisposed() || model.getVersionId() !== version || cssData() !== data) return;
+        const diagnostics = window.__fcClassCompletion.diagnose(lists, data._described, data._canonical);
+        cssDiagnostics.set(model, diagnostics);
+        monaco.editor.setModelMarkers(
+          model,
+          CSS_MARKER_OWNER,
+          diagnostics.map(function (d) {
+            return Object.assign(cssRange(model, d.start, d.end), {
+              severity: d.severity === "error" ? monaco.MarkerSeverity.Error : monaco.MarkerSeverity.Warning,
+              message: d.message,
+              source: "tailwindcss",
+              code: d.code,
+              relatedInformation: d.related.map(function (r) {
+                return Object.assign(cssRange(model, r.start, r.end), { resource: model.uri, message: r.message });
+              }),
+            });
+          }),
+        );
       }
 
       function scheduleCssValidation(model) {
