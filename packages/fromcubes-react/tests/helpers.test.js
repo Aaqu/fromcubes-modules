@@ -17,6 +17,8 @@ const {
   hasFreshBuild,
   identifierRe,
   shouldSkipInstall,
+  getHttpRouter,
+  removeRoute,
 } = require("../nodes/lib/helpers");
 const { extractUtilitySymbols } = require("../nodes/lib/registry-nodes");
 
@@ -749,5 +751,49 @@ describe("shouldSkipInstall", () => {
   it("resolves scoped module names to their nested directory", () => {
     installFake("@scope/pkg", "1.0.0");
     expect(shouldSkipInstall({ dir, module: "@scope/pkg" })).toBe(true);
+  });
+});
+
+describe("getHttpRouter", () => {
+  it("returns _router on Express 4 without touching the throwing router getter", () => {
+    const router = { stack: [] };
+    const app = { _router: router };
+    Object.defineProperty(app, "router", {
+      get() {
+        throw new Error("'app.router' is deprecated!");
+      },
+    });
+    expect(getHttpRouter(app)).toBe(router);
+  });
+
+  it("returns router on Express 5", () => {
+    const router = { stack: [] };
+    expect(getHttpRouter({ router })).toBe(router);
+  });
+
+  it("returns undefined when there is no router", () => {
+    expect(getHttpRouter({})).toBeUndefined();
+    expect(getHttpRouter(undefined)).toBeUndefined();
+    const app = {};
+    Object.defineProperty(app, "router", {
+      get() {
+        throw new Error("no router");
+      },
+    });
+    expect(getHttpRouter(app)).toBeUndefined();
+    expect(() => removeRoute(getHttpRouter({}), "/fromcubes/a")).not.toThrow();
+  });
+});
+
+describe("removeRoute", () => {
+  it("removes only the route with the exact path", () => {
+    const keep1 = { route: { path: "/fromcubes/a/b" } };
+    const keep2 = { route: { path: "/fromcubes/ab" } };
+    const mw = { name: "query" };
+    const router = {
+      stack: [mw, { route: { path: "/fromcubes/a" } }, keep1, keep2],
+    };
+    removeRoute(getHttpRouter({ router }), "/fromcubes/a");
+    expect(router.stack).toEqual([mw, keep1, keep2]);
   });
 });

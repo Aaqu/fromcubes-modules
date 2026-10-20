@@ -381,6 +381,7 @@ module.exports = function (RED) {
     quickCheckSyntax,
     serveableHash,
     hasFreshBuild,
+    getHttpRouter,
     removeRoute,
     isSafeName,
     validateSubPath,
@@ -539,7 +540,7 @@ module.exports = function (RED) {
         deleteCacheFiles(oldSt.jsxHash);
       }
       delete pageState[prevEndpoint];
-      removeRoute(RED.httpNode._router, prevEndpoint);
+      removeRoute(getHttpRouter(RED.httpNode), prevEndpoint);
       delete registeredRoutes[prevEndpoint];
       if (endpointOwners[prevEndpoint] === nodeId) {
         delete endpointOwners[prevEndpoint];
@@ -1596,7 +1597,7 @@ module.exports = function (RED) {
               deleteCacheFiles(lastJsxHash);
             }
             delete pageState[endpoint];
-            removeRoute(RED.httpNode._router, endpoint);
+            removeRoute(getHttpRouter(RED.httpNode), endpoint);
             delete registeredRoutes[endpoint];
           }
 
