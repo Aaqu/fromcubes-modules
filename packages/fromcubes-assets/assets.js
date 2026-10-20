@@ -289,7 +289,7 @@ function registerAssets(RED, express, assetsDir, opts) {
 
   // Upload — 100mb cap is intentionally higher than json/text endpoints.
   RED.httpAdmin.post(
-    "/fromcubes-react/assets/upload/*",
+    /^\/fromcubes-react\/assets\/upload\/(.+)$/,
     WRITE,
     csrfGuard,
     rateLimit,
@@ -321,7 +321,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   );
 
   // Delete
-  RED.httpAdmin.delete("/fromcubes-react/assets/*", WRITE, csrfGuard, rateLimit, (req, res) => {
+  RED.httpAdmin.delete(/^\/fromcubes-react\/assets\/(.+)$/, WRITE, csrfGuard, rateLimit, (req, res) => {
     const rel = req.params[0];
     const target = safePath(rel, assetsDir);
     if (!target) return res.status(400).json({ error: "invalid path" });
@@ -335,7 +335,7 @@ function registerAssets(RED, express, assetsDir, opts) {
   });
 
   // Download
-  RED.httpAdmin.get("/fromcubes-react/assets/download/*", READ, (req, res) => {
+  RED.httpAdmin.get(/^\/fromcubes-react\/assets\/download\/(.+)$/, READ, (req, res) => {
     const rel = req.params[0];
     const target = safePath(rel, assetsDir);
     if (!target) return res.status(400).json({ error: "invalid path" });

@@ -142,6 +142,23 @@ function validateSubPath(input) {
 }
 
 /**
+ * The app's router: `app._router` on Express 4, `app.router` on Express 5.
+ * `_router` is read first because Express 4's `app.router` getter throws.
+ *
+ * @param {Object} app  Express app (e.g. `RED.httpNode`).
+ * @returns {Object|undefined}
+ */
+function getHttpRouter(app) {
+  if (!app) return undefined;
+  if (app._router) return app._router;
+  try {
+    return app.router;
+  } catch {
+    return undefined;
+  }
+}
+
+/**
  * Remove a single route mount-point from an Express router by exact path
  * match. Used at deploy teardown to drop the previous portal's HTTP route
  * before re-registering on the same path.
@@ -745,6 +762,8 @@ module.exports.identifierRe = identifierRe;
 module.exports.serveableHash = serveableHash;
 module.exports.hasFreshBuild = hasFreshBuild;
 module.exports.shouldSkipInstall = shouldSkipInstall;
+module.exports.getHttpRouter = getHttpRouter;
+module.exports.removeRoute = removeRoute;
 module.exports.NAME_MAX_LEN = NAME_MAX_LEN;
 
 /**
@@ -969,6 +988,7 @@ function createHelpers(RED) {
     quickCheckSyntax,
     serveableHash,
     hasFreshBuild,
+    getHttpRouter,
     removeRoute,
     isSafeName,
     validateSubPath,

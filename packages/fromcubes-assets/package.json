@@ -1,6 +1,6 @@
 {
   "name": "@aaqu/fromcubes-assets",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "description": "Fromcubes Assets: static files for portals, managed from a Node-RED sidebar",
   "type": "commonjs",
   "keywords": [
