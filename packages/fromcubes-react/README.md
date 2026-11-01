@@ -112,7 +112,8 @@ Everything your component needs from the flow lives in one hook:
 
 ```jsx
 const {
-  data,          // last broadcast msg.payload from input wire (reactive)
+  data,          // last msg.payload delivered to this tab from the input wire (reactive)
+  topic,         // msg.topic of that same message, "" when it had none
   send,          // send(payload, topic?) — emit msg on output wire
   user,          // portal user object (when Portal Auth is enabled), or null
   portalClient,  // unique session/tab ID assigned by server on connect
@@ -130,6 +131,36 @@ useEffect(() => { send({}, "init"); }, []);
 ```
 
 In the flow, catch `topic === "init"`, look up the state (per-user via `msg._client.userId` if needed) and reply — `msg._client` is already set on the inbound message, so the response returns as a unicast to exactly that tab.
+
+### Every message: `useNodeRedMessages()`
+
+`data` and `topic` are React state: they hold only the **last** message. When two messages arrive before React renders — a flow answering two requests at once, a function node returning several msgs — React renders once and a `useEffect(..., [data])` sees only the last one; the earlier ones are silently lost. The same effect also does not re-fire when the same primitive payload arrives twice in a row.
+
+For events and request → response protocols, use `useNodeRedMessages(handler)`. The handler is called once per incoming message, in order, as `(payload, { topic })`:
+
+```jsx
+function App() {
+  const { send } = useNodeRed();
+  const [photos, setPhotos] = useState([]);
+  const [saving, setSaving] = useState(false);
+
+  useNodeRedMessages((payload, { topic }) => {
+    if (topic === "photos") setPhotos(payload);
+    else if (topic === "saved") setSaving(false);
+  });
+  useEffect(() => { send({}, "init"); }, []);
+  // ...
+}
+```
+
+- It pairs with the `send({}, "init")` pattern above: the hook subscribes in its own effect, which runs before a later `useEffect` in the same component sends the request, so the reply cannot slip past it.
+- No replay: a component mounted later does **not** get an earlier message (unlike `data`, which starts from the last payload this tab received).
+- The latest `handler` is always the one called — no need to memoize it. It unsubscribes on unmount.
+- A handler that throws is logged to the console; other handlers and `useNodeRed()` still get the message.
+
+Rule of thumb: `data` to **show current state**, `useNodeRedMessages` for **events**. (Underneath is the low-level `window.__NR.subscribeMessages(fn)`.)
+
+If a portal already ships its own `fc-portal-utility` named `useNodeRedMessages` (written before the built-in existed), that utility keeps working and shadows the built-in — in every portal that references the name, since utilities are shared.
 
 ## Node configuration
 

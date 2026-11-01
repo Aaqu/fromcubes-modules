@@ -44,7 +44,10 @@
 function route(msg, ctx) {
   const { clients, userIndex, sendTo } = ctx;
   const target = msg && msg._client;
-  const frame = JSON.stringify({ type: "data", payload: msg.payload });
+  // topic rides along only when it is a non-empty string — useNodeRed()
+  // ignores it, useNodeRedMessages() hands it to the handler.
+  const topic = msg && typeof msg.topic === "string" && msg.topic ? msg.topic : undefined;
+  const frame = JSON.stringify({ type: "data", payload: msg.payload, topic });
 
   let delivered = 0;
 

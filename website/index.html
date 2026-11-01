@@ -400,17 +400,23 @@ return msg;</pre>
     <span class="step-tag"><span class="n">7</span> Reference</span>
     <h2>The <code style="font-size:.85em">useNodeRed()</code> hook</h2>
     <p>Every portal page gets one hook that is the whole runtime API:</p>
-    <pre><span class="k">const</span> { data, send, user, portalClient, authRequired } = <span class="f">useNodeRed</span>();</pre>
+    <pre><span class="k">const</span> { data, topic, send, user, portalClient, authRequired } = <span class="f">useNodeRed</span>();</pre>
     <div class="table-scroll">
     <table>
       <tr><th style="width:160px">Field</th><th>Description</th></tr>
       <tr><td><code>data</code></td><td>Reactive value of the last <code>msg.payload</code> received on the node's input. Re-renders the component on every message. Starts as <code>null</code> — nothing is cached server-side, so push periodically or request initial state with <code>send({}, "init")</code>.</td></tr>
+      <tr><td><code>topic</code></td><td>The <code>msg.topic</code> of the same message as <code>data</code>, or <code>""</code> when it had none.</td></tr>
       <tr><td><code>send(payload, topic?)</code></td><td>Emits a message on the portal node's output wire. The message carries <code>msg._client</code> so replies can target just this browser tab.</td></tr>
       <tr><td><code>user</code></td><td>Portal auth data forwarded by a reverse proxy (<code>x-portal-user-*</code> headers), or <code>null</code>.</td></tr>
       <tr><td><code>portalClient</code></td><td>Unique id of this session/tab, assigned by the server — useful for per-client state.</td></tr>
       <tr><td><code>authRequired</code></td><td><code>true</code> when this session is anonymous on a portal with <em>Authenticated-only delivery</em> enabled — render a login hint instead of an empty page.</td></tr>
     </table>
     </div>
+    <p style="margin-top:24px"><code>data</code> holds only the <em>latest</em> payload: messages that arrive faster than React renders collapse into one render, so a <code>useEffect</code> on <code>data</code> can miss some. Use <code>data</code> to show current state; for events and request → response replies use the companion hook <code>useNodeRedMessages</code>, which calls your handler once per message, in order (no replay of earlier messages on mount):</p>
+    <pre><span class="f">useNodeRedMessages</span>((payload, { topic }) =&gt; {
+  <span class="k">if</span> (topic === <span class="s">"photos"</span>) setPhotos(payload);
+  <span class="k">else if</span> (topic === <span class="s">"saved"</span>) setSaving(<span class="k">false</span>);
+});</pre>
     <div class="callout blue">
       <strong>Targeting clients from the flow:</strong> reply with the incoming <code>msg._client</code> intact to answer one tab,
       strip <code>portalClient</code> to reach all tabs of one user, set

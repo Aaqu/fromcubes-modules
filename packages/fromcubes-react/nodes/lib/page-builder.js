@@ -205,7 +205,11 @@ function buildPage(title, transpiledJs, wsPath, customHead, cssHash, user, showW
         window.__NR = {
           _ws: null,
           _listeners: new Set(),
+          // Per-message listeners (useNodeRedMessages). Unlike _listeners they
+          // never get a replay of _lastData: each call is one real frame.
+          _msgListeners: new Set(),
           _lastData: null,
+          _lastTopic: '',
           _authRequired: false,
           _authListeners: new Set(),
           _retries: 0,
@@ -315,8 +319,17 @@ function buildPage(title, transpiledJs, wsPath, customHead, cssHash, user, showW
                   }
                 }
                 if (m.type === 'data') {
+                  const topic = typeof m.topic === 'string' ? m.topic : '';
                   this._lastData = m.payload;
-                  this._listeners.forEach(fn => fn(m.payload));
+                  this._lastTopic = topic;
+                  // Per-message listeners first, each isolated: React may
+                  // coalesce the state updates below into one render, these
+                  // see every frame.
+                  const meta = { topic };
+                  this._msgListeners.forEach(fn => {
+                    try { fn(m.payload, meta); } catch (err) { console.error('useNodeRedMessages handler', err); }
+                  });
+                  this._listeners.forEach(fn => fn(m.payload, topic));
                 }
               } catch (err) { console.error('WS parse', err); }
             };
@@ -336,8 +349,13 @@ function buildPage(title, transpiledJs, wsPath, customHead, cssHash, user, showW
 
           subscribe(fn) {
             this._listeners.add(fn);
-            if (this._lastData !== null) fn(this._lastData);
+            if (this._lastData !== null) fn(this._lastData, this._lastTopic);
             return () => this._listeners.delete(fn);
+          },
+
+          subscribeMessages(fn) {
+            this._msgListeners.add(fn);
+            return () => this._msgListeners.delete(fn);
           },
 
           subscribeAuth(fn) {
@@ -496,4 +514,40 @@ function buildErrorPage(title, error, wsPath) {
     </html>`;
 }
 
-module.exports = { buildPage, buildErrorPage };
+/**
+ * The hooks every portal bundle gets, inserted after the React shorthand and
+ * before utilities (so a utility may call them). Browser code, kept here next
+ * to the `window.__NR` bridge it talks to.
+ *
+ * - `useNodeRed()` — `data`/`topic` are STATE: the last frame (one object,
+ *   so the two never come from different frames). Two frames arriving
+ *   before React renders collapse into one render, and an effect on `[data]`
+ *   sees only the second.
+ * - `useNodeRedMessages(handler)` — one call per frame, `(payload, {topic})`,
+ *   no replay of an earlier frame on mount. Assigned to `window` rather than
+ *   declared: a portal that ships its own utility of that name (written before
+ *   this existed) shadows it instead of colliding with it at bundle time.
+ */
+const NR_HOOKS_SRC = [
+  "function useNodeRed() {",
+  "  const [last, setLast] = React.useState(() => ({ data: window.__NR._lastData, topic: window.__NR._lastTopic }));",
+  "  React.useEffect(() => window.__NR.subscribe((data, topic) => setLast({ data, topic: topic || '' })), []);",
+  "  const [authRequired, setAuthRequired] = React.useState(window.__NR._authRequired);",
+  "  React.useEffect(() => window.__NR.subscribeAuth(setAuthRequired), []);",
+  "  const send = React.useCallback((payload, topic) => {",
+  "    window.__NR.send(payload, topic);",
+  "  }, []);",
+  "  const user = window.__NR._user || null;",
+  "  const portalClient = window.__NR._portalClient;",
+  "  return { data: last.data, topic: last.topic, send, user, portalClient, authRequired };",
+  "}",
+  "window.useNodeRedMessages = function useNodeRedMessages(handler) {",
+  "  const ref = React.useRef(handler);",
+  "  React.useLayoutEffect(() => { ref.current = handler; });",
+  "  React.useEffect(() => window.__NR.subscribeMessages((payload, meta) => {",
+  "    if (typeof ref.current === 'function') ref.current(payload, meta);",
+  "  }), []);",
+  "};",
+].join("\n");
+
+module.exports = { buildPage, buildErrorPage, NR_HOOKS_SRC };

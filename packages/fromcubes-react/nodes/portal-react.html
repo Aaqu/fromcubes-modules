@@ -130,7 +130,8 @@
       const libContent = [
         "declare const React: any;",
         "declare const ReactDOM: any;",
-        "declare function useNodeRed(): { data: any; send: (payload: any, topic?: string) => void; user: { userId: string; login?: string; displayName?: string; email?: string; role?: string; groups: string[] } | null; portalClient: string | null; authRequired: boolean };",
+        "declare function useNodeRed(): { data: any; topic: string; send: (payload: any, topic?: string) => void; user: { userId: string; login?: string; displayName?: string; email?: string; role?: string; groups: string[] } | null; portalClient: string | null; authRequired: boolean };",
+        "declare function useNodeRedMessages(handler: (payload: any, meta: { topic: string }) => void): void;",
       ].join("\n");
       console.log(PREFIX, "addExtraLib globals.d.ts");
       jsDef.addExtraLib(libContent, "file:///globals.d.ts");
@@ -2071,9 +2072,10 @@
     let headEditorInstance = null;
 
     const STARTER = [
-      "// useNodeRed() \u2192 { data, send, portalClient }",
-      "//   data  = last msg.payload from input wire",
+      "// useNodeRed() \u2192 { data, topic, send, portalClient }",
+      "//   data  = last msg.payload from input wire (topic = its msg.topic)",
       "//   send(payload, topic?) = push msg to output wire",
+      "// useNodeRedMessages((payload, { topic }) => ...) = every msg, in order",
       "// Components from fc-portal-component nodes are available by name.",
       "",
       "function App() {",
@@ -2719,6 +2721,8 @@
   <dl class="message-properties">
     <dt>payload <span class="property-type">any</span></dt>
     <dd>Sent to the open pages; read it with <code>useNodeRed().data</code>.</dd>
+    <dt class="optional">topic <span class="property-type">string</span></dt>
+    <dd>Sent along with the payload; read it with <code>useNodeRed().topic</code>.</dd>
     <dt class="optional">_client <span class="property-type">object</span></dt>
     <dd>
       Who gets it: <code>{ portalClient }</code> one browser tab,
@@ -2747,10 +2751,22 @@
 }</pre>
   <p>
     <code>useNodeRed()</code> gives <code>data</code> (the last payload,
-    <code>null</code> until one arrives), <code>send</code>, <code>user</code>
+    <code>null</code> until one arrives), <code>topic</code> (that message's
+    topic, <code>""</code> if none), <code>send</code>, <code>user</code>
     (the visitor, or <code>null</code>) and <code>portalClient</code> (this
     tab's id).
   </p>
+  <p>
+    <code>data</code> holds only the latest payload: messages that arrive
+    faster than React renders are merged into one render. To handle every
+    message (events, replies to a request), use
+    <code>useNodeRedMessages</code> — it calls your function once per
+    message, in order:
+  </p>
+  <pre>useNodeRedMessages((payload, { topic }) =&gt; {
+  if (topic === "photos") setPhotos(payload);
+  else if (topic === "saved") setSaving(false);
+});</pre>
   <p>
     <b>React Component</b> and <b>React Utility</b> nodes can be used here by
     name, without imports.
