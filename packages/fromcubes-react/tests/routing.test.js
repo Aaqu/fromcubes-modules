@@ -296,3 +296,25 @@ describe("router.route — onCanSendTo enforcement", () => {
     expect(b.sent).toHaveLength(0);
   });
 });
+
+describe("router.route — topic in the data frame", () => {
+  it("carries a non-empty string msg.topic", () => {
+    const ctx = setupCtx();
+    const a = ctx.addClient("A", null);
+    route({ payload: 1, topic: "photos" }, ctx);
+    expect(a.sent[0].frame).toEqual({ type: "data", payload: 1, topic: "photos" });
+  });
+
+  it("leaves topic out when it is empty, missing or not a string", () => {
+    const ctx = setupCtx();
+    const a = ctx.addClient("A", null);
+    route({ payload: 1, topic: "" }, ctx);
+    route({ payload: 2 }, ctx);
+    route({ payload: 3, topic: 42 }, ctx);
+    expect(a.sent.map((s) => s.frame)).toEqual([
+      { type: "data", payload: 1 },
+      { type: "data", payload: 2 },
+      { type: "data", payload: 3 },
+    ]);
+  });
+});

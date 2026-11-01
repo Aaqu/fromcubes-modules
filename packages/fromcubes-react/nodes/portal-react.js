@@ -426,7 +426,7 @@ module.exports = function (RED) {
       for (const nodeId of Object.keys(rebuildCallbacks)) scheduleRebuildSelf(nodeId);
     }
   }
-  const { buildPage, buildErrorPage } = require("./lib/page-builder");
+  const { buildPage, buildErrorPage, NR_HOOKS_SRC } = require("./lib/page-builder");
   const { createPortalPageHandler } = require("./lib/portal-page-route");
   const {
     extractUtilitySymbols,
@@ -879,21 +879,8 @@ module.exports = function (RED) {
           "Object.keys(React).filter(k => /^use[A-Z]/.test(k)).forEach(k => { window[k] = React[k]; });",
           "const { createContext, memo, forwardRef, Fragment } = React;",
           "",
-          "// ── useNodeRed hook ──",
-          [
-            "function useNodeRed() {",
-            "  const [data, setData] = React.useState(window.__NR._lastData);",
-            "  React.useEffect(() => window.__NR.subscribe(setData), []);",
-            "  const [authRequired, setAuthRequired] = React.useState(window.__NR._authRequired);",
-            "  React.useEffect(() => window.__NR.subscribeAuth(setAuthRequired), []);",
-            "  const send = React.useCallback((payload, topic) => {",
-            "    window.__NR.send(payload, topic);",
-            "  }, []);",
-            "  const user = window.__NR._user || null;",
-            "  const portalClient = window.__NR._portalClient;",
-            "  return { data, send, user, portalClient, authRequired };",
-            "}",
-          ].join("\n"),
+          "// ── useNodeRed hooks ──",
+          NR_HOOKS_SRC,
           "",
           "// ── Utilities (helpers / hooks / constants) ──",
           cleanUtilJsx,
