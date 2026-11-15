@@ -746,6 +746,72 @@ function shouldSkipInstall(event) {
   return true;
 }
 
+/**
+ * Absolute directories of every npm package esbuild pulled into a bundle,
+ * read from its metafile (`inputs` keys are paths relative to `cwd`, the
+ * working directory of the build). The cache is keyed by the JSX alone, so
+ * these directories — and the versions recorded for them — are what tells a
+ * cached bundle apart from one built against other package versions (a new
+ * `three` in the image, a transitive dep under `@react-three/drei`).
+ * Inputs outside any `node_modules` (stdin, symlinked workspaces) are skipped.
+ *
+ * @param {?Object} metafile  esbuild metafile.
+ * @param {string}  cwd       Directory the `inputs` paths are relative to.
+ * @returns {string[]}        Sorted, de-duplicated package directories.
+ */
+function bundledPackageDirs(metafile, cwd) {
+  const dirs = new Set();
+  const marker = "/node_modules/";
+  for (const input of Object.keys(metafile?.inputs || {})) {
+    if (input.startsWith("<")) continue; // <stdin>, esbuild virtual modules
+    const abs = path.resolve(cwd, input).split(path.sep).join("/");
+    const at = abs.lastIndexOf(marker);
+    if (at < 0) continue;
+    const parts = abs.slice(at + marker.length).split("/");
+    const name = parts[0].startsWith("@") ? parts.slice(0, 2).join("/") : parts[0];
+    if (!name || (name.startsWith("@") && !name.includes("/"))) continue;
+    dirs.add(abs.slice(0, at + marker.length) + name);
+  }
+  return [...dirs].sort();
+}
+
+/**
+ * `version` from `<dir>/package.json`, or null when it cannot be read —
+ * a package that vanished must not match the version recorded for it.
+ *
+ * @param {string} dir
+ * @returns {?string}
+ */
+function readPackageVersion(dir) {
+  try {
+    return (
+      JSON.parse(fs.readFileSync(path.join(dir, "package.json"), "utf8"))
+        .version || null
+    );
+  } catch (_) {
+    return null;
+  }
+}
+
+/**
+ * True when every package recorded with a cached bundle still has the same
+ * version on disk. A missing record (cache written before records existed,
+ * or without a metafile) is NOT unchanged — rebuilding once is cheap, serving
+ * a bundle with stale packages is not.
+ *
+ * @param {?Object<string, ?string>} recorded  package dir → version.
+ * @param {function(string): ?string} [read]  Version reader (tests).
+ * @returns {boolean}
+ */
+function depsUnchanged(recorded, read = readPackageVersion) {
+  if (!recorded || typeof recorded !== "object" || Array.isArray(recorded))
+    return false;
+  for (const [dir, version] of Object.entries(recorded)) {
+    if (read(dir) !== version) return false;
+  }
+  return true;
+}
+
 module.exports = function (RED) {
   return createHelpers(RED);
 };
@@ -765,6 +831,9 @@ module.exports.shouldSkipInstall = shouldSkipInstall;
 module.exports.getHttpRouter = getHttpRouter;
 module.exports.removeRoute = removeRoute;
 module.exports.NAME_MAX_LEN = NAME_MAX_LEN;
+module.exports.bundledPackageDirs = bundledPackageDirs;
+module.exports.readPackageVersion = readPackageVersion;
+module.exports.depsUnchanged = depsUnchanged;
 
 /**
  * Factory that produces the runtime helper bag bound to a Node-RED instance.
@@ -815,13 +884,23 @@ function createHelpers(RED) {
   fs.mkdirSync(cacheDir, { recursive: true });
 
   /**
-   * Load a cached compiled bundle from disk by JSX hash.
+   * Load a cached compiled bundle from disk by JSX hash. The hash covers the
+   * JSX only, so the bundle is served only while every package it was built
+   * from still has the recorded version (`<hash>.deps.json`) — otherwise a new
+   * `three` or icon set in the image would never reach the page.
    *
    * @param {string} jsxHash
    * @returns {?{js: string, metafile: ?Object, error: null}}  null on cache miss.
    */
   function readCachedJS(jsxHash) {
     try {
+      let deps = null;
+      try {
+        deps = JSON.parse(
+          fs.readFileSync(path.join(cacheDir, jsxHash + ".deps.json"), "utf8"),
+        );
+      } catch (_) {}
+      if (!depsUnchanged(deps)) return null;
       const js = fs.readFileSync(path.join(cacheDir, jsxHash + ".js"), "utf8");
       let metafile = null;
       try {
@@ -850,6 +929,17 @@ function createHelpers(RED) {
         fs.writeFileSync(
           path.join(cacheDir, jsxHash + ".meta.json"),
           JSON.stringify(metafile),
+          "utf8",
+        );
+        // Versions of every bundled package — checked by readCachedJS.
+        // esbuild resolves metafile paths against process.cwd() (no absWorkingDir).
+        const deps = {};
+        for (const dir of bundledPackageDirs(metafile, process.cwd())) {
+          deps[dir] = readPackageVersion(dir);
+        }
+        fs.writeFileSync(
+          path.join(cacheDir, jsxHash + ".deps.json"),
+          JSON.stringify(deps),
           "utf8",
         );
       }
@@ -892,7 +982,7 @@ function createHelpers(RED) {
   }
 
   /**
-   * Remove cached `.js`, `.css`, and `.meta.json` files for a given hash.
+   * Remove cached `.js`, `.css`, `.meta.json` and `.deps.json` files for a given hash.
    * No-op when `jsxHash` is falsy. Errors are swallowed (best-effort cleanup).
    *
    * @param {?string} jsxHash
@@ -900,7 +990,7 @@ function createHelpers(RED) {
    */
   function deleteCacheFiles(jsxHash) {
     if (!jsxHash) return;
-    for (const ext of [".js", ".css", ".meta.json"]) {
+    for (const ext of [".js", ".css", ".meta.json", ".deps.json"]) {
       try {
         fs.unlinkSync(path.join(cacheDir, jsxHash + ext));
       } catch (_) {}

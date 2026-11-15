@@ -118,10 +118,10 @@ flowchart TD
   LIBS --> RESOLVE["Resolve needed components + utilities<br/>(transitive symbol scan of the JSX)"]
   RESOLVE --> PRE{"Pre-flight checks"}
   PRE -->|"missing component / syntax err /<br/>no return in App"| ERRP["serve error page<br/>(or degraded last-good)"]
-  PRE -->|ok| CACHE{"disk cache hit<br/>on JSX hash?"}
+  PRE -->|ok| CACHE{"disk cache hit<br/>on JSX hash +<br/>same package versions?"}
   CACHE -->|hit| SERVE
   CACHE -->|miss| ESB["esbuild — ONE bundle pass<br/>React + libs + components + utilities + JSX<br/>alias react/react-dom → single instance"]
-  ESB --> WRITE["write &lt;hash&gt;.js + metafile to cache"]
+  ESB --> WRITE["write &lt;hash&gt;.js + metafile +<br/>package versions to cache"]
   WRITE --> SERVE["pageState[endpoint] updated"]
   RESOLVE -.-> TW["Tailwind candidate scan → tailwindcss.compile()<br/>cached per JSX hash"]
   TW -.-> SERVE
@@ -555,12 +555,21 @@ in the Node-RED log. If your hook is silent: confirm the plugin package is in
 ## Disk cache
 
 Compiled output is cached under `userDir/fromcubes/cache/`, keyed by the JSX hash
-(`<hash>.js`, `<hash>.meta.json`, `<hash>.css`). On rebuild, a cache hit skips
-esbuild and Tailwind entirely.
+(`<hash>.js`, `<hash>.meta.json`, `<hash>.deps.json`, `<hash>.css`). On rebuild, a
+cache hit skips esbuild and Tailwind entirely.
+
+The JSX hash knows nothing about the npm packages the bundle pulls in, so a JS
+entry is a hit only while those packages are unchanged: `writeCachedJS` records
+the directory and `version` of every package esbuild bundled (from the metafile,
+transitive deps included) in `<hash>.deps.json`, and `readCachedJS` treats any
+moved version, vanished package or missing record as a miss. Without it a new
+`three` or `lucide-react` in a Docker image never reached a page whose JSX had
+not changed. Only the affected pages rebuild; the file names — and the CSS URL —
+stay the same.
 
 - `readCachedJS` / `writeCachedJS` / `readCachedCSS` / `writeCachedCSS` — the
   read/write surface (all in `lib/helpers.js`).
-- `deleteCacheFiles(hash)` removes all three extensions; called when a portal's
+- `deleteCacheFiles(hash)` removes every extension; called when a portal's
   hash changes **and** `isHashInUse()` confirms no sibling portal still relies on
   it (two portals with identical JSX share one cache entry).
 - All cache I/O is best-effort: a write failure logs a warn and the build still

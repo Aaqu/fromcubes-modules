@@ -19,7 +19,10 @@ const {
   shouldSkipInstall,
   getHttpRouter,
   removeRoute,
+  bundledPackageDirs,
+  depsUnchanged,
 } = require("../nodes/lib/helpers");
+const createHelpers = require("../nodes/lib/helpers");
 const { extractUtilitySymbols } = require("../nodes/lib/registry-nodes");
 
 describe("validateSubPath", () => {
@@ -795,5 +798,106 @@ describe("removeRoute", () => {
     };
     removeRoute(getHttpRouter({ router }), "/fromcubes/a");
     expect(router.stack).toEqual([mw, keep1, keep2]);
+  });
+});
+
+describe("bundledPackageDirs", () => {
+  const cwd = path.join(path.sep, "srv", "app");
+  const abs = (...p) => path.join(path.sep, ...p).split(path.sep).join("/");
+
+  it("maps every input to its package directory, scoped names included", () => {
+    const metafile = {
+      inputs: {
+        "<stdin>": {},
+        "../../usr/nr/node_modules/three/build/three.module.js": {},
+        "../../usr/nr/node_modules/three/build/three.core.js": {},
+        "../../usr/nr/node_modules/@react-three/drei/core/Text.js": {},
+        "node_modules/react/cjs/react.production.js": {},
+      },
+    };
+    expect(bundledPackageDirs(metafile, cwd)).toEqual([
+      abs("srv", "app", "node_modules", "react"),
+      abs("usr", "nr", "node_modules", "@react-three", "drei"),
+      abs("usr", "nr", "node_modules", "three"),
+    ]);
+  });
+
+  it("takes the innermost node_modules for a nested dependency", () => {
+    const metafile = {
+      inputs: {
+        "node_modules/@react-three/drei/node_modules/three-stdlib/index.js": {},
+      },
+    };
+    expect(bundledPackageDirs(metafile, cwd)).toEqual([
+      abs("srv", "app", "node_modules", "@react-three", "drei", "node_modules", "three-stdlib"),
+    ]);
+  });
+
+  it("skips inputs outside node_modules and tolerates a missing metafile", () => {
+    expect(bundledPackageDirs({ inputs: { "src/app.jsx": {} } }, cwd)).toEqual([]);
+    expect(bundledPackageDirs(null, cwd)).toEqual([]);
+  });
+});
+
+describe("depsUnchanged", () => {
+  const versions = { "/nm/three": "0.187.0", "/nm/react": "19.2.0" };
+  const read = (dir) => versions[dir] ?? null;
+
+  it("is true when every recorded version matches", () => {
+    expect(depsUnchanged({ "/nm/three": "0.187.0" }, read)).toBe(true);
+    expect(depsUnchanged({}, read)).toBe(true);
+  });
+
+  it("is false when a version moved or a package vanished", () => {
+    expect(depsUnchanged({ "/nm/three": "0.186.1" }, read)).toBe(false);
+    expect(depsUnchanged({ "/nm/gone": "1.0.0" }, read)).toBe(false);
+  });
+
+  it("is false without a record (cache from before records existed)", () => {
+    expect(depsUnchanged(null, read)).toBe(false);
+    expect(depsUnchanged(undefined, read)).toBe(false);
+    expect(depsUnchanged([], read)).toBe(false);
+  });
+});
+
+describe("disk cache: bundled package versions", () => {
+  let userDir;
+  let helpers;
+  const pkgDir = () => path.join(userDir, "node_modules", "three");
+  const setVersion = (v) =>
+    fs.writeFileSync(path.join(pkgDir(), "package.json"), JSON.stringify({ name: "three", version: v }));
+  const metafile = () => ({
+    inputs: { [path.relative(process.cwd(), path.join(pkgDir(), "build", "three.module.js"))]: {} },
+  });
+
+  beforeEach(() => {
+    userDir = fs.mkdtempSync(path.join(os.tmpdir(), "fc-cache-"));
+    fs.mkdirSync(pkgDir(), { recursive: true });
+    setVersion("0.186.1");
+    const RED = { settings: { userDir }, hooks: { add() {} }, log: { warn() {}, info() {}, trace() {} } };
+    helpers = createHelpers(RED);
+  });
+  afterEach(() => fs.rmSync(userDir, { recursive: true, force: true }));
+
+  it("serves the bundle while the package version is unchanged", () => {
+    helpers.writeCachedJS("h1", "js-186", metafile());
+    expect(helpers.readCachedJS("h1")?.js).toBe("js-186");
+  });
+
+  it("misses once a bundled package changes version", () => {
+    helpers.writeCachedJS("h1", "js-186", metafile());
+    setVersion("0.187.0");
+    expect(helpers.readCachedJS("h1")).toBeNull();
+  });
+
+  it("misses a bundle cached before versions were recorded", () => {
+    fs.writeFileSync(path.join(helpers.cacheDir, "old.js"), "js-old");
+    expect(helpers.readCachedJS("old")).toBeNull();
+  });
+
+  it("deleteCacheFiles removes the version record too", () => {
+    helpers.writeCachedJS("h1", "js-186", metafile());
+    helpers.deleteCacheFiles("h1");
+    expect(fs.existsSync(path.join(helpers.cacheDir, "h1.deps.json"))).toBe(false);
   });
 });
